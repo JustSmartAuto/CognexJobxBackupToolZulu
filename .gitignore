@@ -1,0 +1,27 @@
+# ---- Gradle / 构建产物 ----
+.gradle/
+build/
+
+# ---- 本机便携 JDK（约 300MB，仅供本机构建，不入库） ----
+.tools/
+
+# ---- 运行时配置（含明文相机密码，禁止提交） ----
+backup-config.json
+config.json
+
+# ---- 运行时数据 ----
+backups/
+exports/
+
+# ---- 发布用 fat jar（大体积二进制，不属于源码） ----
+/jobx文件备份助手_*.jar
+
+# ---- Kimi 会话导出（可能含敏感信息） ----
+kimi-export-*.md
+
+# ---- IDE / 操作系统 ----
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db

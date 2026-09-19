@@ -1,0 +1,77 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'com.cognex.backup'
+version = '1.0.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+tasks.withType(JavaCompile) {
+    // 源码为 UTF-8，显式指定以避免在 GBK 默认编码下编译失败
+    options.encoding = 'UTF-8'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // FlatLaf Look and Feel
+    implementation 'com.formdev:flatlaf:3.4.1'
+    // Apache Commons Net FTP client
+    implementation 'commons-net:commons-net:3.11.1'
+    // JSON processing for config
+    implementation 'com.google.code.gson:gson:2.10.1'
+    // Logging
+    implementation 'org.slf4j:slf4j-simple:2.0.13'
+
+    // === 编辑器标签页（移植自 CognexJobxExportToolZulu / java-insight-hmi）===
+    // CogSocket HMI WebSocket 客户端
+    implementation 'org.java-websocket:Java-WebSocket:1.5.6'
+    // JavaScript 脚本编辑器（语法高亮）
+    implementation 'com.fifesoft:rsyntaxtextarea:3.4.0'
+    // QuickJS 脚本引擎（含本地库，使用 libs/ 下的本地 jar）
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+
+    // === 导出工具标签页（移植自 Go 版导出工具）===
+    // xlsx 生成（A4 打印友好的单元格/位置布局两个 sheet）
+    implementation 'org.apache.poi:poi-ooxml:5.2.5'
+}
+
+application {
+    mainClass = 'com.cognex.backup.Main'
+}
+
+jar {
+    manifest {
+        attributes(
+            'Main-Class': 'com.cognex.backup.Main',
+            'Implementation-Title': 'Cognex Jobx Backup Tool',
+            'Implementation-Version': version
+        )
+    }
+}
+
+task fatJar(type: Jar) {
+    def timestamp = new java.text.SimpleDateFormat("yyMMddHHmm").format(new Date())
+    archiveFileName = "${project.name}-${version}-all_${timestamp}.jar"
+    manifest {
+        attributes(
+            'Main-Class': 'com.cognex.backup.Main',
+            'Implementation-Title': 'Cognex Jobx Backup Tool',
+            'Implementation-Version': version
+        )
+    }
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    with jar
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+build.dependsOn fatJar
