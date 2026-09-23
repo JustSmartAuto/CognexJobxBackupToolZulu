@@ -3,6 +3,8 @@ package com.cognex.backup.ui;
 import com.cognex.backup.config.ConfigManager;
 import com.cognex.backup.ftp.FtpClient;
 import com.cognex.backup.model.CameraConfig;
+import com.cognex.backup.util.Icons;
+import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -48,6 +50,14 @@ public class BackupTabPanel extends JPanel {
         JButton openDirBtn = new JButton("打开备份目录");
         JButton aboutBtn = new JButton("关于");
 
+        Icons.setIcon(addBtn, FontAwesomeSolid.PLUS, 14);
+        Icons.setIcon(editBtn, FontAwesomeSolid.PENCIL_ALT, 14);
+        Icons.setIcon(delBtn, FontAwesomeSolid.TRASH, 14);
+        Icons.setIcon(backupBtn, FontAwesomeSolid.SAVE, 14);
+        Icons.setIcon(backupAllBtn, FontAwesomeSolid.CLONE, 14);
+        Icons.setIcon(openDirBtn, FontAwesomeSolid.FOLDER_OPEN, 14);
+        Icons.setIcon(aboutBtn, FontAwesomeSolid.INFO_CIRCLE, 14);
+
         addBtn.addActionListener(this::onAddCamera);
         editBtn.addActionListener(this::onEditCamera);
         delBtn.addActionListener(this::onDeleteCamera);
@@ -82,13 +92,26 @@ public class BackupTabPanel extends JPanel {
         JScrollPane tableScroll = new JScrollPane(cameraTable);
         mainPanel.add(tableScroll, BorderLayout.CENTER);
 
+        // 说明文本（带 info 图标）
+        JLabel hint = new JLabel("提示：先在表格中选择相机，再执行 立即备份/编辑/删除；备份全部 将依次备份所有相机。留空的备份目录默认保存在 jar 目录下 backups/。");
+        hint.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
+        hint.setForeground(Color.GRAY);
+        Icons.setHintIcon(hint);
+        JPanel hintPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        hintPanel.add(hint);
+
         // Bottom: Log area
         logArea = new JTextArea(8, 0);
         logArea.setEditable(false);
         logArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         JScrollPane logScroll = new JScrollPane(logArea);
         logScroll.setBorder(BorderFactory.createTitledBorder("日志"));
-        mainPanel.add(logScroll, BorderLayout.SOUTH);
+
+        // hint 放日志区上方
+        JPanel southPanel = new JPanel(new BorderLayout());
+        southPanel.add(hintPanel, BorderLayout.NORTH);
+        southPanel.add(logScroll, BorderLayout.CENTER);
+        mainPanel.add(southPanel, BorderLayout.SOUTH);
 
         setLayout(new BorderLayout());
         add(mainPanel, BorderLayout.CENTER);

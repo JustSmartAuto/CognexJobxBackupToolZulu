@@ -1,15 +1,25 @@
 package com.cognex.export;
 
+import com.cognex.export.config.ExportConfigManager;
+import com.cognex.export.model.ExportCamera;
+import org.kordamp.ikonli.Ikon;
+import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
+import org.kordamp.ikonli.swing.FontIcon;
+
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.TitledBorder;
 import java.awt.*;
 import java.io.File;
+import java.util.List;
 
 /**
  * Jobx 导出工具标签页：对应 Go 版 CLI 导出工具的图形界面。
- * 参数（IP/HMI 端口/FTP 端口/FTPS/证书/输出目录/是否跳过表达式）
- * 收集为 {@link ExportTask.Params}，后台执行并实时输出日志。
+ * 支持两种模式：
+ * 1. 手动参数模式：表单填写单个相机的连接参数，点“手动导出”；
+ * 2. 相机列表批量模式：左侧维护相机列表（export-config.json，自动保存），
+ *    勾选多台相机后点“批量导出所选相机”，逐台执行并分别输出到
+ *    输出目录/相机名称/时间戳/ 下，单台失败不中断其余相机。
  */
 public class ExportTabPanel extends JPanel {
 
@@ -22,14 +32,22 @@ public class ExportTabPanel extends JPanel {
     private final JCheckBox chkTrustAll = new JCheckBox("信任所有 TLS 证书", true);
     private final JCheckBox chkNoExpr = new JCheckBox("跳过表达式（更快）", false);
     private final JTextField txtOutDir = new JTextField("", 24);
-    private final JButton btnStart = new JButton("开始导出");
+    private final JButton btnStart = new JButton("手动导出");
+    private final JButton btnBatch = new JButton("批量导出所选相机");
     private final JButton btnBrowse = new JButton("浏览...");
     private final JButton btnOpenDir = new JButton("打开输出目录");
     private final JTextArea logArea = new JTextArea(10, 0);
 
+    private final ExportConfigManager exportConfig = new ExportConfigManager();
+    private final DefaultListModel<ExportCamera> cameraListModel = new DefaultListModel<>();
+    private final JList<ExportCamera> cameraList = new JList<>(cameraListModel);
+
     private volatile boolean running = false;
 
     public ExportTabPanel() {
+        for (ExportCamera c : exportConfig.getCameras()) {
+            cameraListModel.addElement(c);
+        }
         initUI();
     }
 
@@ -50,6 +68,8 @@ public class ExportTabPanel extends JPanel {
                 chkFtps, chkTrustAll, chkNoExpr, txtOutDir, btnBrowse, btnOpenDir}) {
             c.setFont(font);
         }
+        setIcon(btnBrowse, FontAwesomeSolid.FOLDER_OPEN, 14);
+        setIcon(btnOpenDir, FontAwesomeSolid.EXTERNAL_LINK_ALT, 14);
 
         // 第一行：IP / HMI 端口 / 用户名 / 密码
         gbc.gridy = 0;
@@ -105,10 +125,15 @@ public class ExportTabPanel extends JPanel {
         JPanel actionPanel = new JPanel(new BorderLayout(10, 5));
         JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 2));
         btnStart.setFont(new Font("Microsoft YaHei", Font.BOLD, 13));
+        btnBatch.setFont(new Font("Microsoft YaHei", Font.BOLD, 13));
+        setIcon(btnStart, FontAwesomeSolid.FILE_EXPORT, 16);
+        setIcon(btnBatch, FontAwesomeSolid.DOWNLOAD, 16);
         btnRow.add(btnStart);
-        JLabel hint = new JLabel("提示：导出时会自动将相机切换为离线并逐个加载作业，全部完成后恢复原作业与在线状态。旧固件 HMI 端口通常为 8087。");
+        btnRow.add(btnBatch);
+        JLabel hint = new JLabel("批量导出时逐台执行，输出到 输出目录/相机名称/时间戳/，单台失败不影响其余相机。");
         hint.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
         hint.setForeground(Color.GRAY);
+        setHintIcon(hint);
         btnRow.add(hint);
         actionPanel.add(btnRow, BorderLayout.NORTH);
 
@@ -117,25 +142,77 @@ public class ExportTabPanel extends JPanel {
         topPanel.add(actionPanel, BorderLayout.SOUTH);
         mainPanel.add(topPanel, BorderLayout.NORTH);
 
+        // ===== 相机列表（批量导出） =====
+        JPanel cameraPanel = new JPanel(new BorderLayout(5, 5));
+        cameraPanel.setBorder(new TitledBorder("相机列表（批量导出，可多选）"));
+        cameraList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+        cameraList.setFont(new Font("Microsoft YaHei", Font.PLAIN, 12));
+        cameraList.setVisibleRowCount(6);
+        cameraPanel.add(new JScrollPane(cameraList), BorderLayout.CENTER);
+
+        JPanel cameraBtnRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+        JButton btnAdd = new JButton("新增");
+        JButton btnEdit = new JButton("编辑");
+        JButton btnRemove = new JButton("删除");
+        JButton btnSelectAll = new JButton("全选");
+        setIcon(btnAdd, FontAwesomeSolid.PLUS, 14);
+        setIcon(btnEdit, FontAwesomeSolid.PENCIL_ALT, 14);
+        setIcon(btnRemove, FontAwesomeSolid.TRASH, 14);
+        setIcon(btnSelectAll, FontAwesomeSolid.CHECK_SQUARE, 14);
+        for (JButton b : new JButton[]{btnAdd, btnEdit, btnRemove, btnSelectAll}) {
+            b.setFont(new Font("Microsoft YaHei", Font.PLAIN, 12));
+            cameraBtnRow.add(b);
+        }
+        cameraPanel.add(cameraBtnRow, BorderLayout.SOUTH);
+        mainPanel.add(cameraPanel, BorderLayout.CENTER);
+
         // ===== 日志区 =====
         logArea.setEditable(false);
         logArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         JScrollPane logScroll = new JScrollPane(logArea);
         logScroll.setBorder(new TitledBorder("导出日志"));
-        mainPanel.add(logScroll, BorderLayout.CENTER);
+        logScroll.setPreferredSize(new Dimension(0, 220));
+        mainPanel.add(logScroll, BorderLayout.SOUTH);
 
         setLayout(new BorderLayout());
         add(mainPanel, BorderLayout.CENTER);
 
         btnStart.addActionListener(e -> onStart());
+        btnBatch.addActionListener(e -> onBatchExport());
         btnBrowse.addActionListener(e -> onBrowse());
         btnOpenDir.addActionListener(e -> onOpenDir());
+        btnAdd.addActionListener(e -> onAddCamera());
+        btnEdit.addActionListener(e -> onEditCamera());
+        btnRemove.addActionListener(e -> onRemoveCamera());
+        btnSelectAll.addActionListener(e -> cameraList.setSelectionInterval(0, cameraListModel.size() - 1));
+        cameraList.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    onEditCamera();
+                }
+            }
+        });
     }
 
     private JLabel label(String text, Font font) {
         JLabel lbl = new JLabel(text);
         lbl.setFont(font);
         return lbl;
+    }
+
+    /** 给按钮加 ikonli 图标（默认取按钮前景色，随主题/禁用态变色）。 */
+    private static void setIcon(AbstractButton button, Ikon ikon, int size) {
+        FontIcon icon = FontIcon.of(ikon, size);
+        icon.setIconColor(UIManager.getColor("Button.foreground"));
+        button.setIcon(icon);
+    }
+
+    /** 给说明文本加灰色 info 图标。 */
+    private static void setHintIcon(JLabel hint) {
+        FontIcon icon = FontIcon.of(FontAwesomeSolid.INFO_CIRCLE, 14);
+        icon.setIconColor(hint.getForeground());
+        hint.setIcon(icon);
     }
 
     private void onBrowse() {
@@ -184,6 +261,7 @@ public class ExportTabPanel extends JPanel {
 
         running = true;
         btnStart.setEnabled(false);
+        btnBatch.setEnabled(false);
         btnStart.setText("导出中...");
         log("======== 开始导出 ========");
 
@@ -199,7 +277,8 @@ public class ExportTabPanel extends JPanel {
             SwingUtilities.invokeLater(() -> {
                 running = false;
                 btnStart.setEnabled(true);
-                btnStart.setText("开始导出");
+                btnBatch.setEnabled(true);
+                btnStart.setText("手动导出");
                 if (resultMsg == null) {
                     log("======== 导出成功 ========");
                 } else {
@@ -208,6 +287,145 @@ public class ExportTabPanel extends JPanel {
                 }
             });
         }, "jobx-export").start();
+    }
+
+    // ===== 相机列表管理 =====
+
+    private void onAddCamera() {
+        ExportCameraDialog dialog = new ExportCameraDialog(SwingUtilities.getWindowAncestor(this), null);
+        dialog.setVisible(true);
+        if (!dialog.isConfirmed()) {
+            return;
+        }
+        ExportCamera camera = new ExportCamera();
+        try {
+            dialog.fillCamera(camera);
+        } catch (IllegalArgumentException ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "参数错误", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        cameraListModel.addElement(camera);
+        exportConfig.getCameras().add(camera);
+        exportConfig.save();
+    }
+
+    private void onEditCamera() {
+        int index = cameraList.getSelectedIndex();
+        if (index < 0) {
+            JOptionPane.showMessageDialog(this, "请先选择一台相机", "提示", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        ExportCamera camera = cameraListModel.getElementAt(index);
+        ExportCameraDialog dialog = new ExportCameraDialog(SwingUtilities.getWindowAncestor(this), camera);
+        dialog.setVisible(true);
+        if (!dialog.isConfirmed()) {
+            return;
+        }
+        try {
+            dialog.fillCamera(camera);
+        } catch (IllegalArgumentException ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "参数错误", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        exportConfig.save();
+        cameraListModel.setElementAt(camera, index); // 刷新显示
+    }
+
+    private void onRemoveCamera() {
+        List<ExportCamera> selected = cameraList.getSelectedValuesList();
+        if (selected.isEmpty()) {
+            return;
+        }
+        if (JOptionPane.showConfirmDialog(this,
+                "确定删除选中的 " + selected.size() + " 台相机？", "确认", JOptionPane.YES_NO_OPTION)
+                != JOptionPane.YES_OPTION) {
+            return;
+        }
+        for (ExportCamera c : selected) {
+            cameraListModel.removeElement(c);
+            exportConfig.getCameras().remove(c);
+        }
+        exportConfig.save();
+    }
+
+    // ===== 批量导出 =====
+
+    private void onBatchExport() {
+        if (running) {
+            return;
+        }
+        List<ExportCamera> selected = cameraList.getSelectedValuesList();
+        if (selected.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "请先在相机列表中选择要导出的相机（可按住 Ctrl/Shift 多选）",
+                    "提示", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        running = true;
+        btnStart.setEnabled(false);
+        btnBatch.setEnabled(false);
+        btnBatch.setText("批量导出中...");
+        final List<ExportCamera> cameras = selected;
+        log("======== 开始批量导出，共 " + cameras.size() + " 台相机 ========");
+
+        new Thread(() -> {
+            int success = 0;
+            int failed = 0;
+            String outRoot = txtOutDir.getText().trim();
+            boolean noExpr = chkNoExpr.isSelected();
+            for (int i = 0; i < cameras.size(); i++) {
+                ExportCamera camera = cameras.get(i);
+                ExportTask.Params p = buildParamsFromCamera(camera, outRoot, noExpr);
+                SwingUtilities.invokeLater(() -> log("-------- [" + (cameras.indexOf(camera) + 1) + "/" + cameras.size() + "] "
+                        + (camera.getName().isEmpty() ? camera.getIp() : camera.getName()) + " --------"));
+                ExportTask task = new ExportTask(p, msg -> SwingUtilities.invokeLater(() -> log(msg)));
+                String error;
+                try {
+                    error = task.run();
+                } catch (Exception ex) {
+                    error = "导出异常: " + (ex.getMessage() != null ? ex.getMessage() : ex.toString());
+                }
+                if (error == null) {
+                    success++;
+                } else {
+                    failed++;
+                    final String failMsg = error;
+                    SwingUtilities.invokeLater(() -> log("  该相机导出失败: " + failMsg));
+                }
+            }
+            final int s = success;
+            final int f = failed;
+            SwingUtilities.invokeLater(() -> {
+                running = false;
+                btnStart.setEnabled(true);
+                btnBatch.setEnabled(true);
+                btnBatch.setText("批量导出所选相机");
+                log("======== 批量导出结束：成功 " + s + " 台，失败 " + f + " 台 ========");
+                if (f > 0) {
+                    JOptionPane.showMessageDialog(this,
+                            "批量导出完成：成功 " + s + " 台，失败 " + f + " 台（详见日志）",
+                            "导出结果", JOptionPane.WARNING_MESSAGE);
+                }
+            });
+        }, "jobx-export-batch").start();
+    }
+
+    /** 由相机配置构造导出参数，输出目录为 输出根目录/相机名称。 */
+    private ExportTask.Params buildParamsFromCamera(ExportCamera camera, String outRoot, boolean noExpr) {
+        ExportTask.Params p = new ExportTask.Params();
+        p.ip = camera.getIp();
+        p.wsPort = camera.getWsPort();
+        p.user = camera.getUser().isEmpty() ? "admin" : camera.getUser();
+        p.password = camera.getPassword();
+        p.ftpPort = camera.getFtpPort();
+        p.ftps = camera.isFtps();
+        p.trustAllCerts = camera.isTrustAllCerts();
+        p.noExpr = noExpr;
+        String cameraDir = camera.getName().isEmpty() ? camera.getIp() : camera.getName();
+        if (outRoot != null && !outRoot.trim().isEmpty()) {
+            p.outRoot = new File(outRoot.trim(), cameraDir).getAbsolutePath();
+        }
+        return p;
     }
 
     private ExportTask.Params collectParams() {

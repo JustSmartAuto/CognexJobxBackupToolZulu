@@ -1,6 +1,8 @@
 package com.cognex.backup.ui;
 
 import com.cognex.backup.model.CameraConfig;
+import com.cognex.backup.util.Icons;
+import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -37,8 +39,12 @@ public class CameraDialog extends JDialog {
         passwordField = new JPasswordField(20);
         backupDirField = new JTextField(20);
         ftpsCheckBox = new JCheckBox("使用 FTPS (FTP over TLS/SSL)");
+        ftpsCheckBox.setSelected(true); // 添加相机默认勾选 FTPS；编辑时由下方 camera 数据覆盖
         trustAllCertsCheckBox = new JCheckBox("信任所有 TLS 证书 (默认开启，用于自签名证书)");
         trustAllCertsCheckBox.setSelected(true);
+
+        Icons.setIcon(ftpsCheckBox, FontAwesomeSolid.LOCK, 14);
+        Icons.setIcon(trustAllCertsCheckBox, FontAwesomeSolid.SHIELD_ALT, 14);
 
         if (camera != null) {
             nameField.setText(camera.getName());
@@ -71,6 +77,7 @@ public class CameraDialog extends JDialog {
         JPanel dirPanel = new JPanel(new BorderLayout(5, 0));
         dirPanel.add(backupDirField, BorderLayout.CENTER);
         JButton browseBtn = new JButton("浏览...");
+        Icons.setIcon(browseBtn, FontAwesomeSolid.FOLDER_OPEN, 14);
         browseBtn.addActionListener(e -> browseDirectory());
         dirPanel.add(browseBtn, BorderLayout.EAST);
 
@@ -101,6 +108,8 @@ public class CameraDialog extends JDialog {
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
         JButton okBtn = new JButton("确定");
         JButton cancelBtn = new JButton("取消");
+        Icons.setIcon(okBtn, FontAwesomeSolid.CHECK, 14);
+        Icons.setIcon(cancelBtn, FontAwesomeSolid.TIMES, 14);
         okBtn.addActionListener(e -> onOk());
         cancelBtn.addActionListener(e -> dispose());
         btnPanel.add(okBtn);
