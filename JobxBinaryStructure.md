@@ -55,6 +55,18 @@
 | sheet 存储模式切换阈值 `[推测]` | **编辑器侧无切换**：`JobJsonConverter.WriteJson` 恒 inline `Byte[]`；`FileRef` + `sheets/` 是读取端兼容协议，由相机固件写入，详见 §6.6 |
 | `JobValidationSet/` TAR 条目未提及 | 读取协议确认：`JobValidationSet/` 条目**明文 UTF-8 不加密**，经 `Job.json.JobValidationSet` 间接引用（同 FileRef 机制），详见 §7.1 |
 
+### 0.2 v1.4 修正（固件样本 + 解密 sheet 交叉比对，2026-05-30）
+
+不依赖 native 脱壳，改用**相机固件自带作业样本**（`C:\ProgramData\Cognex\In-Sight\In-Sight\26.1.0\SampleJobs\` 下多份真实相机产 .jobx）与模拟器加载缓存 `$loadedJob.tmp`，将每份 data 对象与**解密后 sheet 的 cell[5]（saved）字段**逐一配对：
+
+| v1.3 状态 | v1.4 实证 |
+|-----------|-----------|
+| data/* 是"主图像/像素容器"、疑似 AcquireImage 采集帧 | **错误**。data/* 是**有状态视觉工具单元格的 native 保存状态**（PatMax 训练图案、Caliper 状态模板、CalibrateGrid 标定数据）；灰度段是 D45 TrainPatMaxRedLine 内嵌的训练位图，运行时采集帧不入档 |
+| data/* 在 Job.json 无引用，疑为读取端跳过的孤儿 | 引用只存在于**加密 sheets JSON 的 cell[5].saved**：`{"$type":"FileRef","id":"data/<sha256>"}`；Job.json 顶层不引用属正常 |
+| data/* 内为单一"TLV 记录流" | 实为**按工具类型分发的多套格式**：CalibrateGrid=TLV（无容器头）、TrainPatMaxRedLine=v4 64B 容器+a0/a1/a2 记录森林（固定 128 槽位 + 16B 魔数 + 32B 尾标记）、Caliper=v2 稀疏定长块；EditRegion 等小状态直接内联 cell[5] Byte[]（77B 定长） |
+| 3 个 data 对象分工未知 | **7 份样本 100% 配对**：天窗 A41/D45/A68、VGR A15/A18/A39/A60/A74（4 格共享同一 blob，内容寻址去重）、Timeout A12、demo G13/L13 共享，详见 §5.0 |
+| 写入方代码待 IDA 分析 | `InSightSheets.exe`/`cartel.dll` 被 **Wibu CodeMeter AxProtector 整体加壳**（`__wibuXX` 段、熵 8.00、明文段仅含 CodeMeter 运行时），磁盘静态 IDA 无有效内容；深入字段语义需运行时 dump + Scylla 修 IAT（§5.7） |
+
 ---
 
 ## 1. 总览
@@ -249,11 +261,51 @@ SharpZipLib 在 `TarEntry.CreateTarEntry(name)` 时默认 uid=gid=mtime=0，所�
 
 ---
 
-## 5. `data/*` 对象内容：TLV 记录流 `[推测]`
+## 5. `data/*` 对象 = 工具单元格的 native 训练态/保存状态 `[v1.4 重大突破]`
 
-`data/*` 对象内容（自 `obj_start+0x200` 起）呈现重复的 8 字节 tag 头 + 后续数据的形式。
+> **v1.4 结论（2026-05-30，利用固件自带样本 + sheet 交叉比对，无需脱壳即定位归属）**：
+> 每个 `data/*` 对象都是**某一个有状态视觉工具单元格（trainable/stateful tool cell）的 native 二进制"保存状态"**，由该单元格在 sheet JSON 中的 **cell[5]（官方字段名 `saved`）以 `{"$type":"FileRef","id":"data/<sha256>"}` 引用**。对象名 = 内容 SHA-256，天然内容寻址、可被多个单元格/多个作业共享；Job.json 顶层不引用它们（v1.3 只搜 Job.json 才误判为"无引用孤儿"）。
+> 不同工具类型使用不同 native 序列化格式：**CalibrateGrid → §5.1 TLV 记录流（无容器头）；TrainPatMaxRedLine → §5.5 v4 容器 + a0/a1/a2 记录森林；Caliper → §5.6 v2 稀疏定长布局；EditRegion 等小状态 → 直接内联 cell[5] 的 Byte[]**。
 
-### 5.1 头部前 0x100 字节 hexdump（data/d91c21b0）
+### 5.0 归属映射实证（每份样本 100% 对上单元格）
+
+| 作业 | data 对象（大小） | 引用单元格 | 工具 | 格式 |
+|------|------------------|-----------|------|------|
+| 天窗程序模板 | `d91c21b0…`（120,416B） | **A41** | **CalibrateGrid**（2448×2048，尺度 0.5,0.5） | §5.1 TLV（无容器头） |
+| 天窗程序模板 | `58da3151…`（504,347B） | **D45** | **TrainPatMaxRedLine**（区域 1104,633 / 209,1234） | §5.5 v4 容器 |
+| 天窗程序模板 | `0fe15ae5…`（250,271B） | **A68** | **TrainPatMaxRedLine**（区域 1004,864 / 440,320） | §5.5 v4 容器 |
+| TimeoutForELTool | `641f9248…`（50,760B） | A12 | TrainPatMaxRedLine | v4 容器 |
+| VGRSample_Basic | `34e17792…`（7,435B） | A15 | TrainPatMaxRedLine | v4 容器 |
+| VGRSample_4_Features | `34e17792…`（同 hash 同 blob） | A18/A39/A60/A74 共 4 格 | 4 个训练格**共享同一训练图案** | v4 容器 |
+| demo connector pin… | `40202845…`（2,792B） | G13/L13（参数不同 blob 相同） | **Caliper** ×2 共享 | §5.6 v2 定长 |
+
+cell[5] 两种包装形态：
+- **直接型**（TrainPatMaxRedLine、Caliper）：cell[5] 本身即 `{"$type":"FileRef","id":"data/<hash>"}`；
+- **封装型**（CalibrateGrid）：cell[5] = `{"dataId":1,"distortionModel":4,"version":3,"extractdata":<载荷>}`，`extractdata` 多态：数据大时 = FileRef 外链（A41 → 120KB），未训练/小时 = 内联 `{"$type":"Byte[]","sz":76,"base64":"…"}`（VGR 作业 B4 格即内联 76B，与 120KB 外链头部同构）。
+
+> 样本来源（v1.4 新发现，均在本机磁盘）：固件 26.1.0 自带作业 `C:\ProgramData\Cognex\In-Sight\In-Sight\26.1.0\SampleJobs\**\*.jobx`（相机侧原生写出）；模拟器当前加载缓存 `%LOCALAPPDATA%\Cognex\In-Sight Emulator\.InSight$loadedJob.tmp`（932,864B，与天窗字节级同构）。
+
+### 5.1 格式 A：CalibrateGrid 标定数据 = TLV 记录流（无容器头，自内容偏移 0 起）
+
+> v1.2/v1.3 称"自 obj_start+0x200 起"——**0x200 是 TAR 文件绝对偏移**（= 对象内容起点 + 512B TAR 头）；TLV 实际从 data 对象内容 **0x00** 即开始。
+
+未训练态 76B 内联实例（VGR B4 格 extractdata）与 120KB 外链实例头部完全同构：
+
+```
+8a 0b 03 20 00 00 00 80      TLV 记录1
+81 02 03 20 14 00 00 80      TLV 记录2
+00 00 00 00 00 00 f0 3f      f64 = 1.0（标定尺度 X；A41 训练态此处=0.5）
+00 00 00 00 00 00 f0 3f      f64 = 1.0（标定尺度 Y；A41 训练态此处=0.5）
+01 00 00 00                  u32 = 1
+82 02 03 60 04 00 00 80      TLV 记录3（type=0x60）
+…
+71 0d 03 20 04 00 00 80      TLV 记录（type=0x20，val=4）
+…
+```
+
+以下保留 v1.2/v1.3 对 120KB 训练态（data/d91c21b0）的逐字节记录。头部前 0x70 字节（TAR 文件偏移 0x200..0x260 = 对象内容 0x00..0x60）：
+
+### 5.1.1 头部前 0x70 字节 hexdump（data/d91c21b0，内容偏移 0x00 起）
 
 ```
 00000200: 8a 0b 03 20 00 00 00 80 81 02 03 20 14 00 00 80   ... ....... ....
@@ -265,7 +317,7 @@ SharpZipLib 在 `TarEntry.CreateTarEntry(name)` 时默认 uid=gid=mtime=0，所�
 00000260: 4e 2c 9f 5e 08 27 8d 40 73 4d 0f fd 33 ba 37 40   N,.^.'.@sM..3.7@
 ```
 
-### 5.2 8 字节 tag 头格式（推测）
+### 5.1.2 8 字节 tag 头格式 `[已确认-小样本对照]`
 
 ```
 偏移  字节   字段           说明
@@ -277,7 +329,7 @@ SharpZipLib 在 `TarEntry.CreateTarEntry(name)` 时默认 uid=gid=mtime=0，所�
                             低 3 字节为数值（如 0x14 = 20，0x04 = 4）
 ```
 
-7 个匹配的 tag 头（在 `0x200..0x1e8ba` 范围内）：
+7 个匹配的 tag 头（在 TAR 文件 `0x200..0x1e8ba` 范围内，即内容 0x00..0x1e6ba）：
 
 | 偏移 | bytes | tag1 | tag2 | type | val4 |
 |------|-------|------|------|------|------|
@@ -291,7 +343,7 @@ SharpZipLib 在 `TarEntry.CreateTarEntry(name)` 时默认 uid=gid=mtime=0，所�
 
 > 全段仅 7 处精确匹配该 8 字节模板，说明 **data/* 对象的内部结构远比简单 TLV 复杂**——大量数据是连续 double 数组、整数数组等"裸数据"段。`[推测]`
 
-### 5.3 跟随数据的类型
+### 5.1.3 跟随数据的类型
 
 tag 头之后的数据可能是：
 
@@ -302,11 +354,85 @@ tag 头之后的数据可能是：
 | double 对 | 16 | 0x240..0x24f: 898.551, 23.7019 |
 | 连续 double 数组 | N×8 | 0x250 起的 `-0.25, -0.75, ...` 系列 |
 
-### 5.4 主数据段（图像/像素数据）
+### 5.4 大灰度段的 v1.4 归属修正（非 AcquireImage 采集帧）
 
-`data/58da3151` 对象内 `0x1e8ba..0x5d769`（257,711 字节）是文件最大的非零段，字节值集中在 `0x05..0x14` 范围（小灰度值），符合 **8-bit 灰度图像数据** 特征。这与导出 xlsx 中 `A0` 单元格表达式 `AcquireImage()` 一致——`data/*` 对象承载相机采集的原始图像像素。`[已确认]`
+v1.2/v1.3 推测 `data/58da3151` 内 TAR 偏移 `0x1e8ba..0x5d769`（257,711B，字节值 0x05..0x14）是 A0 `AcquireImage()` 的实时采集图像。**v1.4 修正**：该 blob 属于 **D45 TrainPatMaxRedLine**——灰度段是**训练图案时内嵌的训练区域位图（8-bit 灰度裁剪图）**，第二大段（85,568B，0x6b..0xbc）解释为 PatMax 特征/梯度通道缓冲。`data/*` 不保存运行时采集帧；实时图像只在内存中。
 
-第二大段 `0x99eba..0xaecfa`（85,568 字节）字节值集中在 `0x6b..0xbc`，类似另一幅图像或同图像的另一个通道。`[推测]`
+### 5.5 格式 B：TrainPatMaxRedLine 训练图案 = 64B 容器头 + a0/a1/a2 记录森林 `[v1.4 结构级解析]`
+
+4 份样本（7,435 / 50,760 / 250,271 / 504,347 字节）解析出完全一致的框架：
+
+```
+偏移      字段                                实测
+0x00 u32  formatVersion = 4                  04 00 00 00（恒定）
+0x04 u32  geometryFlag                       00=无几何（未含变换区域）；01=后跟 5 个 f32
+0x08 u32  保留
+0x0C 5×f32 训练区域几何（仅 flag=1）          D45: [633.1, 1104.39, 1233.57, 209.1, 0.0]
+                                            （y, x, y2/对角, x2/对角, 0；与表达式参数对应）
+0x2C u32  标志（0/1，疑似角度/旋转存在位）
+0x34 u32  bodyLen = 文件长度 - 64            四份样本全部精确相等 ✓
+─────────────────────────────────────────── 主体（body，共 bodyLen 字节）
+0x40 16B  格式魔数（PatMax 训练态恒定）        11 79 2d 99 a7 78 4f 9e a5 a4 de 5d be 5b 81 81
+0x50 ...  01 00 00 00 02 <bodyLen:u32> 00 <innerLen:u32=bodyLen-36> 00 00 04 00 00 00
+0x64 32×0xFF 填充
+0x85      版本/时间戳前导（四份相同）          01 00 [10×00] c7 08 5f 01 40 e0 00
+约 0x97   记录森林（见下）
+EOF-0x20  32B 固定尾（四份完全相同）           10 00 00 00 + 24×00 +
+                                            87 27 cc 9b 94 97 4c 89 b9 f2 8e be d4 3d 7e 1f
+```
+
+**记录森林文法**（字节级实测，VGR 与 Timeout 逐记录差分验证）：
+
+- 顶层为**固定 128 个槽位**（4 份样本全部恰好 128 条，索引 u8 连续 0..127），是 PatMax 训练态的固定 schema 表集合；
+- 每个节点序列化为：`a1 01 <idx> a0 01 00 01 <len:u8> <len 字节二进制 key> a2 01 <idx> <字段流…>`；
+- **key 为 GUID 式二进制标识**（2~31 字节变长；常见 16B 公共前缀 + 子 id，非 XOR 文本，跨作业相同前缀=相同工具/特征类）；
+- `a2 01 <ownerIdx> <字段流>`：属性组，ownerIdx 可前向/乱序引用其他节点（形成边/嵌套；节点流中还嵌套 `a1 02 …` 子表）；
+- 字段流由 1 字节 tag + 定长值构成，实测 tag 集：
+
+| tag | 值长度 | 含义（结构推测） | 实测 |
+|-----|--------|-----------------|------|
+| 0x01 | 1B | bool/标志 | `01 00` / `01 01` |
+| 0x02 | 2B | 节点序号 u16 | 每个 key 节点末尾按出现顺序 00,01,02… |
+| 0x21 | 1B | 子类型/枚举（默认 0x02；根节点 0x42；个别 0x0a） | `21 02` |
+| 0x40 | 4B | 复合几何 | `40 e0 81 05 00` |
+| 0x48 | 3B | u16 偏移/坐标对（随节点单调：0x00c0,0x02c0,0x07e0…） | `48 c0 00 00` |
+| 0x49 | 变长 | 复合结构（可内嵌 a0 子 key 与图像/数组） | `49 01 01 00 ff`、`49 64 10 00…` |
+| 0x4a/0x4b | 3B | 0x48 的变体（不同标志位） | `4a e0 0d 00`、`4b f0 08 00` |
+| 0x60 | 0B | 存在型标志（无数据字节） | `60` |
+| 0x80 | 1B | 附加标志 | `… 01 01 80 …` |
+
+- 大 blob 中 0x49 复合字段内嵌的连续字节区即训练位图/特征数组（§5.4 灰度段）；
+- **跨作业差分**：VGR_Basic 与 TimeoutForELTool 的节点 0..24（含 key 与字段值）字节级一致——这是 PatMax 训练态的**框架/默认表前导**（与具体图案无关），差异从节点 25 起（各自图案特征、几何、内嵌图像）。
+
+> 未决：128 槽位各自的 PatMax 语义名、0x48/0x49 内整数的精确量纲，需 native 写入/读取方源码或调试器验证（见 §5.7）。容器边界、长度、魔数、尾标记、文法切分均为实证。
+
+### 5.6 格式 C：Caliper = v2 稀疏定长状态块；EditRegion 等内联小状态
+
+**Caliper（data/40202845，2,792B，G13/L13 共享）**：
+- `[0x00] u32 = 2`（格式版本，区别于 PatMax 的 4）；`[0x08] u32 = 1`；
+- 前段稀疏分布少量 f32：`[0x14]=3.748`、`[0x2c]=1.875`、`[0x44]=1.875`、`[0x4c]=-0.9377`，`[0x4a]` 起 6×0x10；
+- `[0xd0] u32 = 6`；其后直到 0x9ce 几乎全零（预分配结果/缓存槽），`[0x9ce] f32=1.75`，尾部归零；
+- 两个参数不同的 Caliper（-10.886,-3.557 vs 2.907,-11.611）共享同一 blob → 内容只含**运行无关的状态模板/清零结果槽**，卡尺本身无训练态。
+
+**EditRegion（VGR A13，cell[5] 内联 77B Byte[]）定长布局实证**：
+
+```
+0x00  4×f32 几何：y=380, x=740, h=320, w=440（与 Region JSON 完全对应）
+0x10  16×00（angle/curve 等默认值槽）
+0x20  4×f32 几何重复：380, 740, 320, 440
+0x30  12×00
+0x3c  u32 名称字节数 = 13
+0x40  UTF-8 名称：" Train Region"（表达式中前导空格属实）
+```
+
+CalibrateGrid 未训练内联态（76B）见 §5.1。
+
+### 5.7 读写方边界与 native 层定位（IDA 静态路径受阻原因）
+
+- **托管读取方**（ISVS 26.1 `Cognex.InSight.Job.Isvs.dll`）：`ReadJobxJson` 只处理 `Job.json`/`sheets/`/`JobValidationSet/`，**跳过 data 条目**；但同程序集的 cell 模型（`CellJsonConverter` 的 cell[5]=`saved`）定义了 FileRef/Byte[] 多态协议，data/* 的归属正是经此协议在 sheet 内显式引用。
+- **托管写入方排查（v1.4 全量）**：JobCompare / Job Converter / ConfigureFileServer / LicenseGenerator 的 .NET bundle、In-Sight Adapter 三个 Remote DLL（`Cognex.Designer.Remote*.dll`，仅部署/文件传输）、模拟器根目录托管 DLL（`Cognex.InSight.Liger.Emulator.dll` 等，仅 SaveJob 资源串与协议封装）、bundle 内 349 个 ≥8KB 内嵌 PE（690KB 那个只是 ICSharpCode.SharpZipLib）——**均无 data/*/sheets 拆分写入逻辑**。
+- **native 写入/读取方**：Emulator Runtime `…\Runtime\InSightSheets.exe`（79MB）与 `cartel.dll`（7.7MB，链接 libprotobuf/libprotoc、SpiderMonkey）。二者 PE 所有段名均为 `__wibu00..__wibu10`、段熵全部 8.00 → 被 **Wibu CodeMeter AxProtector 整体加壳**；磁盘上的可读段仅含 CodeMeter/CRT 字符串（唯一 PDB：`D:\git\bin\windows-production-release\exe\InSightSheets.pdb`）。IDA Pro 8.3 headless（`idat64.exe`）对磁盘文件静态分析无有效代码/导入可看；`%ProgramData%\Cognex\Firmware\In-Sight\26.1.0\distro_*.cogfw`（345MB~2.3GB）为真相机 Linux/DSP 固件分发包（旧版 4.10 另有未加密 TI DSP `dm643x_*.out`，但格式世代不同）。
+- **继续深入 §5.5 字段语义的可行路径**：运行模拟器（CodeMeter 软许可服务已在本机运行），在作业加载/训练/保存后对 `InSightSheets.exe` 做运行时内存 dump（AxProtector 运行期解密），Scylla 修复 IAT 后再用 IDA 分析 OEP 后代码，按 16B 魔数 `11 79 2d 99 …` / 尾常量 `87 27 cc 9b …` / `data/` 字符串交叉引用定位读写函数。
 
 ---
 
@@ -640,13 +766,14 @@ xlsx 列含义对照：
 
 > v1.2 更新：反编译 Cognex 官方工具源码后，原 7 项中 **5 项已破解**，仅剩 2 项。
 > v1.3 更新：反编译 ISVS 26.1 内嵌程序集后，**XOR 密钥来源已破解**，`data/*` 两项定性收窄至相机固件/native 层。
+> v1.4 更新：**第 5 项（分工）已完全破解**（7 份样本与 cell[5].saved 100% 配对）；第 3 项的**外层 schema 已破解**（三类容器 + 记录森林文法，见 §5），剩余仅 native 字段 ID 语义；写入/读取方确认为加壳的 InSightSheets.exe/cartel.dll。
 
 1. ~~size 字段语义~~ `[已确认-源码]`：**TAR 八进制 size 字段**，即对象内容字节数。详见 §4.1。
 2. ~~seq 字段语义~~ `[已确认-源码]`：**TAR chksum 头校验和**，由 SharpZipLib 自动计算。详见 §4.2。
-3. **`data/*` 对象内部 TLV 结构的完整 schema** `[推测-已定性为 native 层]`：仅识别出 8 字节 tag 头（`tag1 tag2 03 type val4`，末字节 0x80）和跟随数据类型（double/int32）。v1.3 确认 ISVS 26.1 托管层 `ReadJobxJson` 读取 .jobx 时**完全忽略 `data/*` 条目**（仅处理 `Job.json`/`sheets/`/`JobValidationSet/`），其写入逻辑在**相机固件或 native 代码**（Emulator Runtime 的 `InSightSheets.exe`，~72MB native PE，候选逆向对象）中。
+3. **`data/*` 对象内部结构的字段级语义** `[v1.4 外层已破解/字段语义待脱壳]`：外层格式已全部解码——CalibrateGrid 的 8 字节 TLV 头（`tag1 tag2 03 type val4`，末字节 0x80）+ f64/u32 载荷；TrainPatMaxRedLine 的 v4 64 字节容器、16B 魔数、固定 128 槽位 a0/a1/a2 记录森林、32B 尾标记；Caliper 的 v2 稀疏定长块（见 §5.1/§5.5/§5.6）。**未解的仅是**：a2 各 tag（0x40/0x48/0x49…）的官方字段名、128 槽位的 PatMax 语义、二进制 key 的 GUID 编码表。ISVS 26.1 托管层 `ReadJobxJson` 读取时忽略 `data/*`；读写逻辑在 native 的 `InSightSheets.exe`/`cartel.dll` 中，但二者被 **Wibu CodeMeter AxProtector 整体加壳**（`__wibuXX` 段、段熵 8.00、明文段全是 CodeMeter 运行时，PDB 路径 `D:\git\bin\windows-production-release\exe\InSightSheets.pdb`），磁盘 IDA 静态分析无有效代码。下一步：运行时内存 dump + Scylla 修 IAT 后按 16B 魔数交叉引用定位序列化函数（§5.7）。
 4. ~~Job.json.sig 32 字节签名算法~~ `[已确认-源码]`：**HMAC-SHA256(Job.json_bytes, secret_key)**，密钥已提取。详见 §8。
-5. **多个 `data/*` 对象的分工** `[推测-已定性为 native 层]`：data 块 1/2/3 各自承载什么子集的单元格/图像/数据，未与 xlsx 单元格一一对应。与第 3 项同源，需逆向相机固件/native 层。
-6. **sheet 存储模式切换阈值（相机固件侧）** `[推测-范围收窄]`：~~编辑器侧~~已排除——ISVS 26.1 / Job Converter 写 Job.json **恒为 inline `Byte[]`**（`JobJsonConverter.WriteJson` 源码确认）；FileRef + `sheets/` 拆分由相机固件完成，阈值（4,319~42,860 字节明文之间）在固件内。snippet 三格式分支已解析（`isvs-snippet-json` 默认 / `isvs-sheet-json` / `isvs-sheet-aaa`=base64，由调用方传入格式名选择，见 §7.1）。
+5. ~~多个 `data/*` 对象的分工~~ `[v1.4 已确认-已破解]`：每个 data 对象 = 一个有状态视觉工具单元格（cell[5].saved FileRef）的 native 保存状态：天窗 A41=CalibrateGrid 标定、D45/A68=PatMaxRedLine 训练图案；VGR A15/A18/A39/A60/A74=4 格共享同一训练 blob；Timeout A12；demo G13/L13 共享 Caliper 状态。对象名=内容 SHA-256，天然去重共享；Job.json 不直接引用，引用只在加密 sheets 内（§5.0 归属表）。同时修正：data/* 不存 AcquireImage 实时帧，大灰度段是训练图案内嵌位图（§5.4）。
+6. **sheet 存储模式切换阈值（相机固件侧）** `[推测-范围收窄]`：~~编辑器侧~~已排除——ISVS 26.1 / Job Converter 写 Job.json **恒为 inline `Byte[]`**（`JobJsonConverter.WriteJson` 源码确认）；FileRef + `sheets/` 拆分由相机固件/native（即加壳的 InSightSheets.exe）完成，阈值（4,319~42,860 字节明文之间）在固件内。snippet 三格式分支已解析（`isvs-snippet-json` 默认 / `isvs-sheet-json` / `isvs-sheet-aaa`=base64，由调用方传入格式名选择，见 §7.1）。
 7. ~~4 字节 XOR 密钥来源~~ `[已确认-源码]`（v1.3 破解）：**`JobxSerializer.DeobfuscateBytes()` 源码 `byte[] obfKey = { 114, 155, 15, 46 }`**（即 0x72 0x9B 0x0F 0x2E）。Cognex 官方定性为 "obfuscation"（混淆）。密钥编译为 RVA 静态数组（`Cognex.InSight.JobCompare.App.exe` 偏移 `0x94091EC` 处 raw 命中），这就是 v1.2 在字符串表/静态字段中搜不到的原因。详见 §6.1。
 8. ~~`ExampleHmiSpreadsheetCells.json` 的加载机制~~ `[已确认-不需破解]`：通过 SDK README 已确认该 .json 是 Cognex.InSight.Web SDK 的 HMI 显示覆盖文件，与 .jobx 独立，由 SDK 在 HMI 层加载后覆盖 sheet 中 `'Placeholder for X'` 占位单元格。Nyan_cat_125px_frame.png 也是同目录外部资源。.json 和 .png 都不参与 .jobx 内部存储。
 
@@ -770,24 +897,27 @@ ISVS 26.1 的 `Cognex.InSight.JobCompare.App.exe` 是 .NET 单文件 bundle，�
 - **cells 每行 12 元素官方语义**（v1.3）：`[location, expression, condition, value, name, saved, cellStyle, graphicsStyle, comment, input, output, ipProtected]`；
 - **Job.json 官方 schema**（v1.3）：顶层恒为 `AcqSettings`/`JobSettings`/`JobVersion`/`Metadata`/`Sheets` 五键 + 14 项 `$type` 白名单 + `JobValidationSet/` 明文条目间接引用协议；
 - **sheet 有两种存储模式**：小 sheet → inline base64 在 `Job.json.Sheets.<name>` 中（`Byte[]` 类型）；大 sheet → 独立 `sheets/<hash>` 对象 + XOR 加密；**v1.3 确认编辑器侧无切换逻辑（恒 inline），FileRef 由相机固件写入**；
+- **`data/*` = 有状态视觉工具单元格的 native 保存状态**（v1.4，7 份相机产样本 100% 配对）：由解密 sheet 的 **cell[5]（saved）以 FileRef 引用**，对象名=内容 SHA-256，可跨格/跨作业共享去重；天窗 A41=CalibrateGrid 标定（d91c21b0）、D45/A68=TrainPatMaxRedLine 训练图案（58da3151/0fe15ae5），VGR 4 格共享 34e17792，Timeout A12=641f9248，demo G13/L13 共享 Caliper 40202845；
+- **data/* 三类外层格式已实证解码**（v1.4）：CalibrateGrid=8 字节 TLV 头（无容器头，未训练 76B 内联 / 训练后 120KB 外链同构）；TrainPatMaxRedLine=v4 64 字节容器（u32 版本 4 + 区域 5×f32 + bodyLen）+ 16B 魔数 `11 79 2d 99…` + 固定 128 槽位 a0/a1/a2 记录森林 + 32B 尾标记 `10 00 00 00…87 27 cc 9b…`；Caliper=v2 稀疏定长状态块；EditRegion=77B 内联定长块（4×f32 几何×2 + u32 名称长度 + 名称）；
+- **大灰度段归属修正**（v1.4）：257,711B 灰度段位于 D45 PatMax blob 内 = 训练图案内嵌 8-bit 位图（特征/梯度通道），**不是 AcquireImage 实时采集帧**；运行时图像不入 .jobx；
 - **`ExampleHmiSpreadsheetCells.json` 与 `.png` 是 Cognex.InSight.Web SDK 的 HMI 显示覆盖资源**，与 .jobx 独立，不参与 .jobx 内部存储。
 
 ### 推测（中置信度）
-- `data/*` 对象内 8 字节 tag 头 + 跟随数据的 TLV 模式（已定性：写入方为相机固件/native 层，托管读取端忽略该条目）；
-- 主数据段 `0x1e8ba..0x5d769` 是图像像素数据（与 `AcquireImage()` 表达式呼应）；
+- PatMax v4 容器记录森林中各 a2 字段 tag 的含义（0x01=bool、0x02=序号、0x21=枚举、0x48/0x4a/0x4b=u16 几何量、0x49=可嵌套图像/数组的复合结构——为按 4 份样本归纳的结构推测，无源码旁证）；
 - 相机固件侧 inline/FileRef 切换阈值位于 4,319~42,860 字节明文长度之间（编辑器侧源码已确认无此逻辑）。
 
 ### 未知（低置信度）
-- `data/*` 对象 TLV 字段的完整 schema 与多个 data 对象的分工——需逆向 native 层（候选：Emulator Runtime `InSightSheets.exe`，~72MB native PE，可用 IDA Pro headless）。
+- native 记录序列化器的**字段 ID 语义表**：128 个固定槽位各自的 PatMax 官方语义名、a2 tag 的精确类型与量纲、二进制 key 的 GUID 分配表。读写方已定位为 `InSightSheets.exe`/`cartel.dll`，但二者被 Wibu CodeMeter AxProtector 整体加壳（`__wibuXX` 段、熵 8.00），磁盘静态 IDA 无有效代码；需运行模拟器做内存 dump + Scylla 修 IAT 后动态分析（路径见 §5.7）。
 
 ---
 
-**文档版本**：1.3（v1.0 初版 → v1.2 XOR 破解 + Job Converter 源码确认 → v1.3 ISVS 26.1 内嵌程序集反编译：XOR 密钥官方源码 + Job.json/cell 官方 schema + 编辑器恒 inline 结论）
-**生成时间**：2026-09-23（v1.3 修订）
+**文档版本**：1.4（v1.0 初版 → v1.2 XOR 破解 + Job Converter 源码确认 → v1.3 ISVS 26.1 内嵌程序集反编译：XOR 密钥官方源码 + Job.json/cell 官方 schema + 编辑器恒 inline 结论 → v1.4 固件样本 + 解密 sheet cell[5] 交叉比对：data/* 分工完全破解 + 三类容器格式结构级解码 + InSightSheets.exe/cartel.dll Wibu 加壳定性）
+**生成时间**：2026-05-30（v1.4 修订）
 **样本**：
 - `天窗程序模板.jobx`（932,864 字节，JobVersion=24.4，IS8905M 相机）
 - `ExampleHmiSpreadsheetCells.jobx`（11,776 字节，JobVersion=22.2，IS2802M 相机）
 - `Xavier标准作业模块.cxdx`（64,000 字节，同族 .cxdx 格式）
+- v1.4 新增相机产样本（固件 26.1.0 `SampleJobs\`）：`VGRSample_Basic.jobx`、`VGRSample_4_Features.jobx` 等 5 份 VGR（共享 data/34e17792）、`JobTimeout\TimeoutForELTool.jobx`（72,192B，data/641f9248）、`Repeat\demo connector pin inspection.jobx`（47,104B，data/40202845）；模拟器缓存 `$loadedJob.tmp`（932,864B，与天窗同构）
 **反查依据**：
 - `天窗程序模板.jobx_20260918_100758.xlsx`（406 单元格，304 表达式）
 - **Cognex 官方 "In-Sight Job Converter" 工具反编译源码**（6 个自有 DLL，ilspycmd 8.2 反编译为 1.75MB C# 源代码）
