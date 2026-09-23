@@ -11,6 +11,10 @@
 >   - `Cognex.InSight.Job.Isvs.Internal\...\RHejpnxfeOJLlFWuQg.cs` —— HMAC-SHA256 签名写入器
 >   - `Cognex.InSight.Job.Isvs.Internal\...\ksRVLn68kJi81Bh7or.cs` —— 字符串混淆解码器
 >   - `Cognex.InSight.Job.Isvs\...\JobxJsonSerializer.cs` —— JSON 序列化器配置
+> - **Cognex In-Sight Vision Suite 26.1 反编译**（v1.3）：`C:\Program Files\Cognex\In-Sight\In-Sight Vision Suite\Cognex.InSight.JobCompare.App.exe`（155MB .NET 单文件 bundle）经内嵌 PE carving 提取出新版 `Cognex.InSight.Job.Isvs.dll`（含 Job Converter 版本没有的 `Cognex.InSight.Job.Isvs.Serialization` 完整命名空间），反编译源码存于 `_decompiled\_bundle\dec1\`。关键文件：
+>   - `JobxSerializer.cs` —— **含 `DeobfuscateBytes()`：XOR 密钥官方源码（v1.3 最大突破）**
+>   - `ByteArrayJsonConverter.cs` / `CellJsonConverter.cs` / `SheetJsonConverter.cs` / `JobJsonConverter.cs` —— Job.json 官方 schema
+>   - `JobxSerializationBinder.cs` —— 14 类型 TypeMap
 
 文档约定：
 - **置信度标记**：`[已确认]` = 经多份样本/源码交叉验证；`[推测]` = 单样本归纳、缺乏旁证；`[未知]` = 未解之谜。
@@ -38,6 +42,18 @@
 | 4 字节 XOR 密钥来源 | 仍 `[未知]`（不在静态字符串表/字段中，可能内联在 IL 指令中），但密钥本身已知 |
 
 > **重要性**：源码确认后，整个文档的"对象容器"模型应直接重写为"标准 TAR 归档"。下文保留旧版章节以展示逆向推演过程，但所有 `[未知]` 项已转为 `[已确认]`，并在 §10 起列出源码确认的完整结论。
+
+### 0.1 v1.3 修正（In-Sight Vision Suite 26.1 内嵌程序集反编译，2026-09-23）
+
+从 ISVS 26.1 的 `Cognex.InSight.JobCompare.App.exe`（.NET 单文件 bundle）carving 出内嵌新版 `Cognex.InSight.Job.Isvs.dll`，获得官方 XOR 混淆源码与完整 JSON schema：
+
+| v1.2 状态 | v1.3 源码确认 |
+|-----------|---------------|
+| XOR 密钥来源 `[未知]` | **已破解**：`JobxSerializer.DeobfuscateBytes()` 中 `byte[] obfKey = { 114, 155, 15, 46 }`（即 0x72 0x9B 0x0F 0x2E），Cognex 官方命名为 "obfuscation"（混淆），详见 §6.1 |
+| inline sheet `Byte[]` 结构（样本归纳） | 官方 schema：`{"$type":"Byte[]","sz":<字节数>,"base64":"<b64>"}`（`ByteArrayJsonConverter.cs`） |
+| cell 行索引 5~11 语义 `[推测]` | 官方语义：`[location, expression, condition, value, name, saved, cellStyle, graphicsStyle, comment, input, output, ipProtected]`（`CellJsonConverter.cs`），详见 §6.4 |
+| sheet 存储模式切换阈值 `[推测]` | **编辑器侧无切换**：`JobJsonConverter.WriteJson` 恒 inline `Byte[]`；`FileRef` + `sheets/` 是读取端兼容协议，由相机固件写入，详见 §6.6 |
+| `JobValidationSet/` TAR 条目未提及 | 读取协议确认：`JobValidationSet/` 条目**明文 UTF-8 不加密**，经 `Job.json.JobValidationSet` 间接引用（同 FileRef 机制），详见 §7.1 |
 
 ---
 
@@ -308,6 +324,21 @@ tag 头之后的数据可能是：
 - 密钥不依赖对象名 hash、不依赖相机固件——**是 Cognex 容器格式的硬编码常量**。
 - 加密对象类型：**仅 `sheets/<hash>` 与 `snippet.json`（cxdx）**。其他对象（`data/*`、JSON 对象、`Job.json`、`.sig`）均**不加密**，明文存储。
 
+**v1.3 官方源码确认**（ISVS 26.1 内嵌 `Cognex.InSight.Job.Isvs.dll` → `_decompiled\_bundle\dec1\Cognex.InSight.Job.Isvs.Serialization\JobxSerializer.cs`）：
+
+```csharp
+private static byte[] DeobfuscateBytes(byte[] data)
+{
+    byte[] obfKey = new byte[4] { 114, 155, 15, 46 };   // = 0x72, 0x9B, 0x0F, 0x2E
+    return data.Select((b, i) => (byte)(b ^ obfKey[i % obfKey.Length])).ToArray();
+}
+```
+
+- Cognex 官方术语是 **"obfuscate"（混淆）而非"加密"**：读取端函数名 `DeobfuscateBytes`，XOR 对称，写入端用同密钥混淆。
+- 密钥在编译产物中以**十进制字节字面量数组**存在（编译器生成 RVA 静态数组），这就是 v1.2 在字符串表和静态 `byte[]` 字段中都搜不到的原因。在 `Cognex.InSight.JobCompare.App.exe` 中搜索原始字节 `72 9B 0F 2E` 命中 1 处（文件偏移 `0x94091EC`），正是该 RVA 数组数据。
+- 该版本 `ReadJobxJson` 读取协议：`Job.json` 明文 UTF-8；`sheets/` 条目 → `DeobfuscateBytes` → UTF-8 JSON；`JobValidationSet/` 条目 → 明文 UTF-8；其余条目（含 `data/*`）**直接跳过**。
+- 写入端 `Write()`/`WriteJobxTarFile`（本版本）只写 `Job.json` 一个条目（通过 `JobxWriterHelper` = SharpZipLib `TarOutputStream(blockFactor: 1)`，解释了 512 字节 blocking 与行尾 0x00 填充）；`sheets/*`、`data/*` 由相机固件/native 层产生。
+
 ### 6.2 破解方法（已知明文攻击）
 
 由于 `ExampleHmiSpreadsheetCells.jobx` 小样本（11,776 字节）的 sheet 内容直接以 **base64 inline** 在 `Job.json` 中（`"Sheets":{"Inspection":{"$type":"Byte[]","sz":4319,"base64":"..."}}`），无需 XOR 解密即可观察到 sheet JSON 的标准结构：
@@ -354,24 +385,28 @@ sheet = json.loads(plain.decode('utf-8'))
 | `rowHeights` | array | 各行像素高度（默认 20） |
 | `timeout` | int | 执行超时（毫秒，实测 60000） |
 
-### 6.4 单元格行结构（cells 数组每项）
+### 6.4 单元格行结构（cells 数组每项）`[已确认-源码]`
 
-每行是一个**变长数组**，至少 11 个元素：
+每行是一个**变长数组**，官方写入端恒输出 12 元素（`CellJsonConverter.WriteCellArray` 顺序）：
 
-| 索引 | 字段 | 类型 | 实测例 |
-|------|------|------|--------|
+| 索引 | 官方字段 | 类型 | 说明 |
+|------|----------|------|--------|
 | 0 | location | str | `"A0"`、`"B1"`、`"$A$0"` |
-| 1 | expression | str | `"AcquireImage()"`、`"Count($A$0,9999999,0,0)"`、`"'Trigger Count"`（以 `'` 开头表字面量） |
-| 2 | flag | int | 恒为 1 |
+| 1 | expression | str | `"AcquireImage()"`、`"Count($A$0,9999999,0,0)"`；以 `'` 开头 = 文本字面量（此时 value = expression 去掉首字符） |
+| 2 | condition（CellState） | str/int | 条件状态；`"1"`/1 = 正常（默认值，数组中恒为 1） |
 | 3 | value | str/int/float/dict/null | 运行时结果；dict 形如 `{"$type":"Image",...}`、`{"$type":"Byte[]","sz":16,"base64":"..."}` |
 | 4 | name | str | 单元格显示名（如 `"AcqCount"`） |
-| 5 | timestamp/extra | array/null | null 或时间戳数组 `[年月日时分秒...]` |
-| 6 | ? | str | 恒为 `""` |
-| 7 | ? | str | 恒为 `""` |
-| 8 | ? | str | 恒为 `""` |
-| 9 | ? | int | 恒为 0 |
-| 10 | ? | int | 恒为 0 |
-| 11+ | 可选额外 | int | 小样本中无；大样本部分行末尾追加 1 个 0 |
+| 5 | saved | 任意/null | **上次保存的单元格值**（v1.2 误判为"时间戳"） |
+| 6 | cellStyle | str | CSS 风格样式串（`IsvsCellStyleSerializer` 序列化；`""` = 无样式） |
+| 7 | graphicsStyle | str | 图形样式名（`""` = 无） |
+| 8 | comment | str | 批注 |
+| 9 | input | 0/1 | 是否输入单元格 |
+| 10 | output | 0/1 | 是否输出单元格 |
+| 11 | ipProtected | 0/1 | 是否 IP 保护 |
+
+- 读取端对超过 12 个的额外元素**忽略**；12 元素内可截断（`Count > N` 才读），旧文件 5 元素短行也能读。
+- 另支持**对象形式** `{"$type":"Cell","location":...,"expression":...,"value":...,"input":1,...}`（`SerializeCellsAsObjects` 开关；读取端两种都兼容，写入端默认数组形式）。
+- ISVS 版 `SheetJsonConverter` 仅显式处理 `cells`/`columnWidths`/`rowHeights`/`timeout` 四个键；sheet JSON 中其余字段（`coreThreshold`、`outputs`、`passFailCell`、`processingCores`、`metadata` 等）由完整 Sheet 类型携带，该读取端不消费。
 
 ### 6.5 加密对象字节分布特征（误判教训）
 
@@ -383,12 +418,17 @@ sheet = json.loads(plain.decode('utf-8'))
 
 ### 6.6 两种 sheet 存储模式
 
-| 模式 | 触发条件 | Job.json 中 Sheets 字段 | sheet 数据位置 |
-|------|----------|------------------------|----------------|
-| **inline base64** | 小 sheet（实测 sz ≤ 4319 字节解码后） | `"Sheets":{"<name>":{"$type":"Byte[]","sz":<bytes>,"base64":"<b64>"}}` | 直接嵌入 Job.json，**无独立 sheets 对象** |
-| **独立对象 + XOR** | 大 sheet（实测 42,860 字节明文） | `"Sheets":{"<name>":{"$type":"FileRef","id":"sheets/<sha256>"}}` | 独立 `sheets/<hash>` 对象，内容 XOR 加密 |
+| 模式 | Job.json 中 Sheets 字段 | sheet 数据位置 |
+|------|------------------------|----------------|
+| **inline base64** | `"Sheets":{"<name>":{"$type":"Byte[]","sz":<bytes>,"base64":"<b64>"}}` | 直接嵌入 Job.json，**无独立 sheets 对象** |
+| **独立对象 + XOR** | `"Sheets":{"<name>":{"$type":"FileRef","id":"sheets/<sha256>"}}` | 独立 `sheets/<hash>` 对象，内容 XOR 混淆 |
 
-阈值未精确确认，但 `ExampleHmiSpreadsheetCells.jobx`（4319 字节明文 / 5760 字符 base64）已 inline，`天窗程序模板.jobx`（42,860 字节明文）独立对象，说明阈值位于二者之间。`[推测]`
+**v1.3 源码结论（重新定性）**：`JobJsonConverter.WriteJson` 中每个 sheet 都经 `SerializeToByteArray` → `ByteArrayJsonConverter` 序列化为 inline `Byte[]` —— **ISVS 编辑器 / Job Converter 写入侧不存在任何大小阈值切换逻辑，恒为 inline**。`FileRef` + `sheets/<hash>` 是**读取端兼容协议**（`ReadJobxJson` 两种都支持），实际由**相机固件**（托管 .NET 层之外的 native/固件代码）在保存到相机时写入：
+
+- 编辑器 / Job Converter 直接保存的 .jobx：sheet 恒 inline `Byte[]`（源码确认）；
+- 相机固件保存/导出的 .jobx（本文件 3 个样本均出自相机）：小 sheet inline、大 sheet FileRef，**切换阈值逻辑在相机固件内**，托管层无此代码（实测 inline 上限 ≥ 4,319 字节明文，FileRef 下限 ≤ 42,860 字节）。
+
+`ByteArrayJsonConverter` 官方 schema：`{"$type":"Byte[]","sz":<解码后字节数>,"base64":"<base64>"}`。
 
 ### 6.7 与 cxdx 的对照
 
@@ -410,6 +450,25 @@ plain = bytes(content[i] ^ key[i%4] for i in range(len(content)))
 
 - 内容区 `0x0e1c00..0x0e3400`（6,144 字节），其中明文 JSON 占 5,808 字节，剩余为 0x00 填充。
 - JSON 起点：`0x0e1c00`（对象头偏移 0x200 处，与所有其他对象一致）。
+
+**v1.3 官方 schema**（`JobJsonConverter.cs` 源码确认，写入端恒定输出以下 5 个顶层键，顺序固定）：
+
+```json
+{
+  "AcqSettings": { "...": "相机采集设置（$type=settings）" },
+  "JobSettings": { "...": "$type=LigerJobSettings" },
+  "JobVersion":  "22.2",
+  "Metadata":    { "JobType": "Spreadsheet" },
+  "Sheets":      { "<sheet名>": { "$type": "Byte[]", "sz": 0, "base64": "..." } }
+}
+```
+
+- `JobVersion` 默认 `"22.2"`（样本实测 24.4/22.2）；`Metadata.JobType` ∈ `Spreadsheet`/`EasyBuilder`。
+- `Sheets` 写入端恒为 inline `Byte[]`（§6.6）；读取端额外兼容 `FileRef` 与**旧格式**（无 `Sheets` 键时，顶层 `Acquisition`/`Inspection` 键直接是 sheet）。
+- `JobValidationSet`：Job.json 中 `"JobValidationSet":{"<名>":"<TAR条目名>"}` 间接引用 `JobValidationSet/` TAR 条目（**明文 UTF-8**），读取端解析后放入 `ValidationSet` 字段。
+- 属性名 camelCase（`JobxContractResolver`）；特例 `Region.Width`/`Height` → `w`/`h`。
+- `$type` 类型名白名单（`JobxSerializationBinder.TypeMap`，14 项）：`Byte[]`、`Cell`、`Sheet`、`settings`(AcqSettings)、`ValidationSet`、`LigerJobSettings`(JobSettings)、`EasyViewSettings`、`HmiPages`、`HmiPage`、`HmiImageOrientation`、`ResultQueueSettings`、`FocusSettings`、`Region`、`IlluminationSettings`；snippet 容器 `ReadOnlyBufferObject` 序列化为 `CopyBufferObject`。
+- 片段（snippet）三格式官方语义（`WriteSnippet`，默认 `isvs-snippet-json`）：`isvs-snippet-json` = `CopyBufferObject` JSON；`isvs-sheet-json` = sheet JSON 明文；`isvs-sheet-aaa` = **sheet JSON 的 base64**（`.aaa` 扩展名，即 `.aaa` 文件的官方格式）。
 - 内容是单行 JSON，根对象含字段：`AcqSettings`、`EdgeAgentAdapterConfig`（FileRef）、`JobSettings`、`JobValidationSet`（FileRef）、`JobVersion`（`"24.4"`）、`Metadata`（`CameraType: IS8905M`，`FirmwareVersion: 26.1.0 (3930)`，`JobType: Spreadsheet`）、`PerDeviceAcqSettings`、`Sheets.Inspection`（FileRef → `sheets/740d18f5...`）、`computeResourceOrchestrator`（FileRef）。
 - 子对象通过 `{"$type":"FileRef","id":"<objname>"}` 引用其他对象，正是容器格式的设计动机。
 
@@ -580,14 +639,15 @@ xlsx 列含义对照：
 ## 12. 未解之谜清单
 
 > v1.2 更新：反编译 Cognex 官方工具源码后，原 7 项中 **5 项已破解**，仅剩 2 项。
+> v1.3 更新：反编译 ISVS 26.1 内嵌程序集后，**XOR 密钥来源已破解**，`data/*` 两项定性收窄至相机固件/native 层。
 
 1. ~~size 字段语义~~ `[已确认-源码]`：**TAR 八进制 size 字段**，即对象内容字节数。详见 §4.1。
 2. ~~seq 字段语义~~ `[已确认-源码]`：**TAR chksum 头校验和**，由 SharpZipLib 自动计算。详见 §4.2。
-3. **`data/*` 对象内部 TLV 结构的完整 schema** `[推测-未在反编译源码中找到]`：仅识别出 8 字节 tag 头（`tag1 tag2 03 type val4`，末字节 0x80）和跟随数据类型（double/int32），完整字段含义未确认。**`data/*` 对象的内容可能由更底层（非 Cognex .NET 层）的代码生成**，反编译的 6 个 Cognex .NET DLL 中未见其写入逻辑。
+3. **`data/*` 对象内部 TLV 结构的完整 schema** `[推测-已定性为 native 层]`：仅识别出 8 字节 tag 头（`tag1 tag2 03 type val4`，末字节 0x80）和跟随数据类型（double/int32）。v1.3 确认 ISVS 26.1 托管层 `ReadJobxJson` 读取 .jobx 时**完全忽略 `data/*` 条目**（仅处理 `Job.json`/`sheets/`/`JobValidationSet/`），其写入逻辑在**相机固件或 native 代码**（Emulator Runtime 的 `InSightSheets.exe`，~72MB native PE，候选逆向对象）中。
 4. ~~Job.json.sig 32 字节签名算法~~ `[已确认-源码]`：**HMAC-SHA256(Job.json_bytes, secret_key)**，密钥已提取。详见 §8。
-5. **多个 `data/*` 对象的分工** `[推测]`：data 块 1/2/3 各自承载什么子集的单元格/图像/数据，未与 xlsx 单元格一一对应。可能在 `Cognex.InSight.Job.Ise.dll` 中有线索（未深入分析）。
-6. **sheet 存储模式切换阈值** `[推测]`：何时用 inline base64、何时用独立 XOR 对象，仅知阈值在 4319~42860 字节明文长度之间。**反编译源码中 `JobxSerializer.WriteSnippet` 有三种格式分支（`isvs-sheet-aaa` / `isvs-sheet-json` / `isvs-snippet-json`），但触发条件未追踪到。**
-7. **4 字节 XOR 密钥来源** `[未知-部分破解]`：密钥本身已知（`0x72 0x9b 0x0f 0x2e`），通过已知明文攻击（小样本 sheet inline base64）破解并跨 3 份样本验证。但**反编译的 6 个 Cognex .NET DLL 中未直接出现该字节常量**（既不在静态字符串表 `lSAQW6c5l(int)` 索引中，也不在静态 `byte[]` 字段中），可能在更底层的非 .NET 代码（如 native C++ 库或硬件固件）中，或作为 IL 内联字面量散落在某个未反编译的方法体里。
+5. **多个 `data/*` 对象的分工** `[推测-已定性为 native 层]`：data 块 1/2/3 各自承载什么子集的单元格/图像/数据，未与 xlsx 单元格一一对应。与第 3 项同源，需逆向相机固件/native 层。
+6. **sheet 存储模式切换阈值（相机固件侧）** `[推测-范围收窄]`：~~编辑器侧~~已排除——ISVS 26.1 / Job Converter 写 Job.json **恒为 inline `Byte[]`**（`JobJsonConverter.WriteJson` 源码确认）；FileRef + `sheets/` 拆分由相机固件完成，阈值（4,319~42,860 字节明文之间）在固件内。snippet 三格式分支已解析（`isvs-snippet-json` 默认 / `isvs-sheet-json` / `isvs-sheet-aaa`=base64，由调用方传入格式名选择，见 §7.1）。
+7. ~~4 字节 XOR 密钥来源~~ `[已确认-源码]`（v1.3 破解）：**`JobxSerializer.DeobfuscateBytes()` 源码 `byte[] obfKey = { 114, 155, 15, 46 }`**（即 0x72 0x9B 0x0F 0x2E）。Cognex 官方定性为 "obfuscation"（混淆）。密钥编译为 RVA 静态数组（`Cognex.InSight.JobCompare.App.exe` 偏移 `0x94091EC` 处 raw 命中），这就是 v1.2 在字符串表/静态字段中搜不到的原因。详见 §6.1。
 8. ~~`ExampleHmiSpreadsheetCells.json` 的加载机制~~ `[已确认-不需破解]`：通过 SDK README 已确认该 .json 是 Cognex.InSight.Web SDK 的 HMI 显示覆盖文件，与 .jobx 独立，由 SDK 在 HMI 层加载后覆盖 sheet 中 `'Placeholder for X'` 占位单元格。Nyan_cat_125px_frame.png 也是同目录外部资源。.json 和 .png 都不参与 .jobx 内部存储。
 
 ---
@@ -679,6 +739,16 @@ exp = base64.b64encode(hmac.new(KEY, jb, hashlib.sha256).digest())
 # exp == sb  → match=True（3 样本全通过）
 ```
 
+### v1.3 单文件 bundle 内嵌程序集提取
+
+ISVS 26.1 的 `Cognex.InSight.JobCompare.App.exe` 是 .NET 单文件 bundle，但 bundle manifest 占位符未按标准布局回填（签名后 8 字节偏移量无效），标准 bundle 解析器失败。改用 **PE carving**：
+
+1. 全文件（20,641 个文件 / 4.36GB）字节级扫描 XOR 密钥 `72 9B 0F 2E`、`JobxSerializer`/`JobxWriter` 字符串 → 唯一命中的 Cognex 二进制为 `Cognex.InSight.JobCompare.App.exe`；
+2. 扫描 `MZ`+`PE\0\0`，按 COFF section 表（RA+RS 最大值）计算内嵌程序集真实边界，carve 出 8 个内嵌 PE；
+3. 含 `JobxWriterHelper` 字符串与密钥字节的 `9406680.dll`（108,544 字节）即新版 `Cognex.InSight.Job.Isvs.dll`，`ilspycmd -p` 反编译为 `_decompiled\_bundle\dec1\`。
+
+方法论脚本（`_isearch.py` 分块多模式字节扫描 / `_ctx.py` hexdump / `_pe.py` PE carving）运行后已删除；反编译源码 `dec1\` 保留以备查阅。
+
 ---
 
 ## 14. 置信度总结
@@ -695,25 +765,25 @@ exp = base64.b64encode(hmac.new(KEY, jb, hashlib.sha256).digest())
 - **`Job.json.sig` = `base64(HMAC-SHA256(Job.json_bytes, secret_key))`**，44 字节 base64 文本，secret_key 32 字节，base64 = `DtrDN+DqE5lDTNNWDl1tkYI92hmjAW2g8Rc+xmn9P04=`（v1.2 经 `RHejpnxfeOJLlFWuQg.cs` 源码 + 3 样本验证确认）；
 - cxdx 是同族格式（4 个对象，对象头布局一致，`snippet.json` 也用 XOR 加密，`snippet.json.sig` 同样走 HMAC-SHA256）；
 - **xlsx 中的表达式/中文值在 .jobx 二进制中无法直接找到明文**——存储在 `sheets/<hash>` 对象的 XOR 加密内容中；
-- **`sheets/<hash>` 与 `snippet.json` 用 4 字节循环 XOR 加密，密钥 `0x72 0x9b 0x0f 0x2e` 固定且跨文件通用**——核心破解结论；
+- **`sheets/<hash>` 与 `snippet.json` 用 4 字节循环 XOR 加密，密钥 `0x72 0x9b 0x0f 0x2e` 固定且跨文件通用**——核心破解结论；v1.3 起升级为**官方源码级确认**（`DeobfuscateBytes()`，`obfKey = {114,155,15,46}`，Cognex 定性为 "obfuscation"）；
 - **sheet JSON 标准结构**：`{"$type":"Sheet","cells":[["<loc>","<expr>",1,<value>,"<name>",...],...],...}`；
-- **sheet 有两种存储模式**：小 sheet → inline base64 在 `Job.json.Sheets.<name>` 中（`Byte[]` 类型）；大 sheet → 独立 `sheets/<hash>` 对象 + XOR 加密；
+- **cells 每行 12 元素官方语义**（v1.3）：`[location, expression, condition, value, name, saved, cellStyle, graphicsStyle, comment, input, output, ipProtected]`；
+- **Job.json 官方 schema**（v1.3）：顶层恒为 `AcqSettings`/`JobSettings`/`JobVersion`/`Metadata`/`Sheets` 五键 + 14 项 `$type` 白名单 + `JobValidationSet/` 明文条目间接引用协议；
+- **sheet 有两种存储模式**：小 sheet → inline base64 在 `Job.json.Sheets.<name>` 中（`Byte[]` 类型）；大 sheet → 独立 `sheets/<hash>` 对象 + XOR 加密；**v1.3 确认编辑器侧无切换逻辑（恒 inline），FileRef 由相机固件写入**；
 - **`ExampleHmiSpreadsheetCells.json` 与 `.png` 是 Cognex.InSight.Web SDK 的 HMI 显示覆盖资源**，与 .jobx 独立，不参与 .jobx 内部存储。
 
 ### 推测（中置信度）
-- `data/*` 对象内 8 字节 tag 头 + 跟随数据的 TLV 模式；
+- `data/*` 对象内 8 字节 tag 头 + 跟随数据的 TLV 模式（已定性：写入方为相机固件/native 层，托管读取端忽略该条目）；
 - 主数据段 `0x1e8ba..0x5d769` 是图像像素数据（与 `AcquireImage()` 表达式呼应）；
-- sheet 存储模式切换阈值位于 4319~42860 字节明文长度之间（源码 `WriteSnippet` 发现 3 个格式分支 `snippet-json`/`sheet-json`/`sheet-archive`，触发条件未跟踪）。
+- 相机固件侧 inline/FileRef 切换阈值位于 4,319~42,860 字节明文长度之间（编辑器侧源码已确认无此逻辑）。
 
 ### 未知（低置信度）
-- **4 字节 XOR 密钥 `0x72 0x9b 0x0f 0x2e` 的源码位置**——密钥已验证有效，但不在 6 个 DLL 的静态字符串表/byte[] 字段中，可能内联在 IL 指令或非 .NET 原生代码中；
-- `data/*` 对象 TLV 字段的完整 schema（未在 6 个反编译 DLL 中找到，可能在原生代码中）；
-- 多个 `data/*` 对象的分工细节。
+- `data/*` 对象 TLV 字段的完整 schema 与多个 data 对象的分工——需逆向 native 层（候选：Emulator Runtime `InSightSheets.exe`，~72MB native PE，可用 IDA Pro headless）。
 
 ---
 
-**文档版本**：1.2（v1.0 + ExampleHmiSpreadsheetCells.jobx 小样本交叉验证 + sheets XOR 加密破解 + Cognex 官方 Job Converter 源码反编译确认）
-**生成时间**：2026-09-23（v1.2 修订）
+**文档版本**：1.3（v1.0 初版 → v1.2 XOR 破解 + Job Converter 源码确认 → v1.3 ISVS 26.1 内嵌程序集反编译：XOR 密钥官方源码 + Job.json/cell 官方 schema + 编辑器恒 inline 结论）
+**生成时间**：2026-09-23（v1.3 修订）
 **样本**：
 - `天窗程序模板.jobx`（932,864 字节，JobVersion=24.4，IS8905M 相机）
 - `ExampleHmiSpreadsheetCells.jobx`（11,776 字节，JobVersion=22.2，IS2802M 相机）
@@ -721,5 +791,6 @@ exp = base64.b64encode(hmac.new(KEY, jb, hashlib.sha256).digest())
 **反查依据**：
 - `天窗程序模板.jobx_20260918_100758.xlsx`（406 单元格，304 表达式）
 - **Cognex 官方 "In-Sight Job Converter" 工具反编译源码**（6 个自有 DLL，ilspycmd 8.2 反编译为 1.75MB C# 源代码）
+- **Cognex In-Sight Vision Suite 26.1 内嵌程序集反编译源码**（`_decompiled\_bundle\dec1\`，自 `Cognex.InSight.JobCompare.App.exe` PE carving + ilspycmd）
 - `src/main/java/com/cognex/export/*.java`
 - `InSightWebSDK-26.1.0/SampleCode/dotnet/WindowsFormsApp/`（Cognex 官方 .NET SDK 示例，含 `HmiSpreadsheetCells.cs`、`README.md`）
