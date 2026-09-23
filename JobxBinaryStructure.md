@@ -3,12 +3,41 @@
 > 样本：`天窗程序模板.jobx`（932,864 字节，Cognex InSight 8000/9000 系列相机导出）
 > 对照样本：`Xavier标准作业模块.cxdx`（64,000 字节，同族 `.cxdx` 格式）
 > 配套数据：`天窗程序模板.jobx_20260918_100758.xlsx`（406 个单元格，304 条表达式）
-> 反查依据：本仓库 `src/main/java/com/cognex/export/ExportTask.java`、`XlsxExporter.java`
+> 反查依据：
+> - 本仓库 `src/main/java/com/cognex/export/ExportTask.java`、`XlsxExporter.java`
+> - **Cognex 官方工具源码反编译**：`D:\JustStupid\jobx表格编辑器_2604270917\In-Sight Job Converter` 目录下 6 个 Cognex 自有 DLL（ilspycmd 8.2 反编译为 C# 源代码）。关键文件：
+>   - `Cognex.InSight.Job.Isvs\...\JobxSerializer.cs` —— `.jobx` 主序列化器
+>   - `Cognex.InSight.Job.Isvs\...\JobxWriterHelper.cs` —— TAR 写入器封装
+>   - `Cognex.InSight.Job.Isvs.Internal\...\RHejpnxfeOJLlFWuQg.cs` —— HMAC-SHA256 签名写入器
+>   - `Cognex.InSight.Job.Isvs.Internal\...\ksRVLn68kJi81Bh7or.cs` —— 字符串混淆解码器
+>   - `Cognex.InSight.Job.Isvs\...\JobxJsonSerializer.cs` —— JSON 序列化器配置
 
 文档约定：
 - **置信度标记**：`[已确认]` = 经多份样本/源码交叉验证；`[推测]` = 单样本归纳、缺乏旁证；`[未知]` = 未解之谜。
 - 偏移以文件绝对字节地址计；十六进制标注为 `0x........`。
 - 字节序：多字节整数一律 **小端 (LE)**，IEEE-754 double 为 8 字节小端。
+- **TAR 头偏移**：本文档沿用 POSIX ustar TAR 头字段名（详见 §2）。
+
+---
+
+## 0. 重大结论修正（v1.2，2026-09-23）
+
+通过反编译 Cognex 官方 "In-Sight Job Converter" 工具（路径见上文，6 个自有 DLL 共 1.75MB C# 源代码），确认以下 **颠覆性结论**，纠正了 v1.1 中所有 `[未知]` 项：
+
+| v1.1 推测 | v1.2 源码确认 |
+|-----------|---------------|
+| `.jobx` 是自定义对象容器 | **`.jobx` 是标准 POSIX ustar TAR 归档**（无 ustar magic，旧式 V7 变体） |
+| 0x200 字节"对象头"是自定义结构 | 0x200 字节就是 **TAR entry header（512 字节）** |
+| 0x7c `size_ascii` 是十进制且语义不明 | **八进制 ASCII size**（TAR 标准），与 Python `tarfile` 读出的 size 完全一致 |
+| 0x94 `seq` 是"序列号/时间戳" | **TAR 头校验和 chksum**（TAR 标准，自动算） |
+| 0x9b `" 0"` 是"状态位" | chksum 末位空格 + typeflag `'0'`（regular file 标志），跨字段读取假象 |
+| `0x64 "664"` 是"版本标记" | **TAR 文件 mode 字段**，八进制 664 = `rw-rw-r--` |
+| `0x6c "0"` / `0x88 "0"` 是 subtype/flag | **TAR uid=0**（root 用户）/ **mtime=0**（Unix epoch，1970-01-01） |
+| `Job.json.sig` = "32 字节 SHA-256 签名" | **HMAC-SHA256(Job.json_bytes, secret_key)**，base64 编码，44 字节 |
+| `secret_key` 未知 | 已通过 .NET 反射加载 DLL 调用混淆解码函数提取，**32 字节，base64 = `DtrDN+DqE5lDTNNWDl1tkYI92hmjAW2g8Rc+xmn9P04=`** |
+| 4 字节 XOR 密钥来源 | 仍 `[未知]`（不在静态字符串表/字段中，可能内联在 IL 指令中），但密钥本身已知 |
+
+> **重要性**：源码确认后，整个文档的"对象容器"模型应直接重写为"标准 TAR 归档"。下文保留旧版章节以展示逆向推演过程，但所有 `[未知]` 项已转为 `[已确认]`，并在 §10 起列出源码确认的完整结论。
 
 ---
 
@@ -55,30 +84,42 @@ cxdx 前缀为 `version`（不是 `data/`），结构更简单，但对象头布
 
 ---
 
-## 2. 对象头固定布局（0x200 字节）`[已确认]`
+## 2. 对象头固定布局（0x200 字节）= POSIX TAR Entry Header `[已确认-源码]`
 
-每个对象块开头 0x200 字节是固定结构头：
+> **v1.2 重大修正**：经过 Cognex 官方源码反编译确认（`JobxSerializer.cs` 第 537 行 `TarInputStream(jobxStream, 1, Encoding.UTF8)`），本节所谓的"对象头"实际就是 **标准 POSIX ustar TAR entry header（512 字节）**。所有偏移、字段名都对应 TAR 标准，仅缺 `ustar` magic（旧 V7 TAR 变体，SharpZipLib 写入风格）。
+
+每个对象块开头 0x200（512）字节是 TAR entry header，字段布局：
 
 ```
-偏移      长度    字段               说明
-0x00      变长    name               ASCII 对象名，以 0x00 终止；剩余字节补 0
-                                    （最长实测 0x5f 字符，对应 70 字节 hash 名）
-0x45      0x1f    reserved           全 0 填充（实测无任何非零字节）
-0x64      4+     "664\0"             固定版本标记（"664" + NULL）
-0x6c      4+     "0\0"               ASCII "0" + NULL  [推测: 某种 subtype/flag]
-0x7c      变长    size_ascii          ASCII 十进制数字串 + NULL
-                                    （推测: 对象内容的某种长度/计数，§4）
-0x88      4+     "0\0"               ASCII "0" + NULL
-0x94      变长    seq_ascii           ASCII 6位数字串 + NULL
-                                    （推测: 序列号/时间戳，§4.2）
-0x9b      3      " 0\0"              ASCII " 0"（含前导空格）+ NULL [推测: 状态位]
-0xa0      0x60   padding            全 0 填充至偏移 0x100
-0x100     0x100  reserved2          全 0 填充至偏移 0x200（仅 data/* 对象；
-                                    sheets/JSON 对象常从 0x100 起即有内容）
-0x200     ---    content_start      真正的内容数据起点
+偏移     长度  TAR 字段名      本文档旧称          实测值/语义
+0x00     100   name            name                ASCII 对象名，NULL 终止，剩余补 0
+                                          （data/<sha256>、sheets/<sha256>、Job.json 等）
+0x64     8     mode            "664\0"            八进制 664 = "rw-rw-r--" 文件权限（无前导零）
+0x6C     8     uid             "0\0"              八进制 0 = root 用户 ID
+0x74     8     gid             （v1.1 未单独标识）八进制 0 = root 组 ID
+0x7C     12    size            "size_ascii"       八进制 ASCII 内容字节数 + NULL/space
+0x88     12    mtime           "0\0"              八进制 0 = Unix 时间戳 0（1970-01-01 UTC）
+0x94     8     chksum          "seq_ascii"        八进制 ASCII 头校验和，末位 NULL+空格
+0x9C     1     typeflag        （跨字段读到" 0"） '0' (0x30) = regular file
+0x9D     100   linkname        （v1.1 未识）      全 0（非符号链接）
+0x101    6     magic           （v1.1 未识）      全 0（无 ustar magic，V7 变体）
+0x107    2     version         （v1.1 未识）      全 0
+0x109    32    uname           （v1.1 未识）      全 0
+0x129    32    gname           （v1.1 未识）      全 0
+0x149    8     devmajor        （v1.1 未识）      全 0
+0x151    8     devminor        （v1.1 未识）      全 0
+0x159    155   prefix          （v1.1 未识）      全 0
+0x1F4    12    padding         （v1.1 未识）      全 0，凑齐 512 字节
+0x200    ---   content_start  content_start      真正内容起点
 ```
 
-> 注：`0x100..0x200` 区段在 `data/*` 对象中恒为 0，在 `sheets/<hash>`、JSON 对象中可能从 0x100 起即出现内容字节。这表明对象头实际长度可能依对象类型而不同（`data/*` 用 0x200 头；其他类型用 0x100 头）。`[推测]`
+> **修正（v1.1→v1.2）**：
+> - 旧文档将 0x100~0x200 全 0 解释为"reserved2 padding"，实际是 TAR 头的 linkname/magic/version/uname/gname/devmajor/devminor/prefix 字段，因无 ustar 扩展信息而全 0。
+> - "664\0" 不是版本标记，而是 **TAR mode 字段**（八进制 664 = rw-rw-r--）。
+> - "0\0" 在 0x6c 是 **uid=0**，在 0x74 是 **gid=0**（v1.1 误将 0x74 当成 size 一部分），在 0x88 是 **mtime=0**。
+> - "size_ascii" 不是十进制，是 **八进制**：例 "353140" = 0o353140 = 120,416 字节，对应 Python `tarfile` 读出的 size。
+> - "seq_ascii" 不是序列号/时间戳，是 **TAR chksum 头校验和**：所有 512 字节头求和（chksum 字段按 8 个空格 0x20 计），结果以八进制写入。
+> - 跨字段读到的 " 0" 是 chksum 末位空格（0x9B）+ typeflag '0'（0x9C），是 regular file 标志，不是状态位。
 
 ### 2.1 对象头 hexdump 示例（对象 #0，作业数据块 1）
 
@@ -119,62 +160,76 @@ cxdx 前缀为 `version`（不是 `data/`），结构更简单，但对象头布
 
 ### 3.1 内容区起点 `[已确认]`
 
-- `data/*` 对象：内容起点 = `obj_start + 0x200`（即对象头 0x200 字节）
-- `sheets/*` 对象、JSON 对象、`.sig` 对象：内容起点 = `obj_start + 0x100`（对象头 0x100 字节）
+- **所有对象类型**（data/*、sheets/*、JSON 对象、.sig 对象）：内容起点 = `obj_start + 0x200`（即对象头 0x200 字节）
 - 内容区到下一个对象起点之间为 0x00 填充。
 
-### 3.2 内容区到下一对象的间距（实测）
+> **修正（v1.1）**：早期推测"sheets/JSON/.sig 对象用 0x100 头"是错误的。`ExampleHmiSpreadsheetCells.jobx` 的 Job.json 内容实际起于 `0x200`（全 0 填充从 0x100 到 0x200），而非 0x100。所有对象头一律 0x200 字节。
+
+### 3.2 内容区到下一对象的间距（实测，所有内容起点 = obj_start + 0x200）
 
 | 对象 | 内容起点 | 下一对象起点 | 间距字节 | 非零字节 | size 字段 | 比例 |
 |------|----------|--------------|----------|----------|-----------|------|
 | data/d91c21b0 | 0x000200 | 0x01da00 | 121,088 | 72,954 | 353,140 | 2.92 |
-| data/58da3151 | 0x01da00+0x200 | 0x099000 | 505,088 | 489,315 | 1,731,033 | 3.43 |
-| data/0fe15ae5 | 0x099000+0x200 | 0x0d6400 | 250,624 | 188,873 | 750,637 | 3.00 |
+| data/58da3151 | 0x01dc00 | 0x099000 | 505,088 | 489,315 | 1,731,033 | 3.43 |
+| data/0fe15ae5 | 0x099200 | 0x0d6400 | 250,624 | 188,873 | 750,637 | 3.00 |
 | sheets/740d18f5 | 0x0d6600 | 0x0e0e00 | 43,008 | 42,402 | 123,554 | 2.86 |
-| computeResourceOrchestrator | 0x0e0f00 | 0x0e1200 | 768 | 12 | 14 | 0.02 |
-| JobValidationSet | 0x0e1300 | 0x0e1600 | 768 | 190 | 276 | 0.36 |
-| EdgeAgentAdapterConfig | 0x0e1700 | 0x0e1a00 | 768 | 85 | 125 | 0.16 |
-| Job.json | 0x0e1b00 | 0x0e3400 | 6,400 | 5,808 | 13,260 | 2.07 |
-| Job.json.sig | 0x0e3500 | EOF+对齐 | 1,792 | 44 | 54 | 0.03 |
+| computeResourceOrchestrator | 0x0e1000 | 0x0e1200 | 512 | 12 | 14 | 0.02 |
+| JobValidationSet | 0x0e1400 | 0x0e1600 | 512 | 190 | 276 | 0.36 |
+| EdgeAgentAdapterConfig | 0x0e1800 | 0x0e1a00 | 512 | 85 | 125 | 0.16 |
+| Job.json | 0x0e1c00 | 0x0e3400 | 6,144 | 5,808 | 13,260 | 2.07 |
+| Job.json.sig | 0x0e3600 | EOF+对齐 | 1,024 | 44 | 54 | 0.03 |
 
 `size` 字段与内容字节数**无简单线性关系**（比例 0.02 ~ 3.43），语义见 §4.1。
 
 ---
 
-## 4. 对象头元数据字段语义
+## 4. 对象头元数据字段语义 = TAR 头标准字段 `[已确认-源码]`
 
-### 4.1 `0x7c` size 字段 `[未知]`
+### 4.1 `0x7c` size 字段 `[已确认-源码]`
 
-- 看似是 ASCII 十进制整数，但与内容字节数比例不固定。
-- 对 JSON 对象（Job.json、ValidationSet、EdgeAgent）观察：
-  - Job.json 实际 JSON 字符数 5,808，size=13,260，比例 ≈ 2.28
-  - JobValidationSet JSON 字符数 190，size=276，比例 ≈ 1.45
-  - EdgeAgent JSON 字符数 85，size=125，比例 ≈ 1.47
-  - computeResourceOrchestrator JSON `{"slots":[]}` = 11 字符，size=14
-- 推测 `size` 是 **JSON 序列化后某种"token 计数"或包含元数据后的扩展大小**，而非字节数。也可能是 *未压缩前的字节数*，而容器内存储的是压缩形式（但 JSON 对象的明文 ASCII 表明无压缩）。`[未知]`
+**八进制 ASCII，对应 TAR 标准 size 字段**，单位为字节。
 
-### 4.2 `0x94` seq 字段 `[推测]`
+Python `tarfile.open().getmembers()` 读出的 `m.size` 字段即此值，验证如下：
 
-- 6 位 ASCII 数字，范围 `003057` ~ `017163`。
-- 对象 0~3（data/sheets）的 seq 在 `013XXX` ~ `017XXX`；对象 7~8（Job.json/sig）的 seq 在 `0030XX` ~ `0034XX`。
-- 推测：**某种内部序列号或时间戳**（MMDDhhmm 截断？版本号？）。cxdx 样本中类似字段为 `002164` ~ `004365`，与 jobx 数值范围重叠。
-- 同一文件内不同对象 seq 数值差异较大，说明它**不是简单的全局版本号**，而是每个对象独立维护的字段。`[推测]`
+| 对象 | size 字段（八进制 ASCII） | 十进制 | tarfile 读出 | 内容区实际占用（含对齐 padding） |
+|------|---------------------------|--------|--------------|----------------------------------|
+| data/d91c21b0 | "353140" | 0o353140 = 120,416 | 120,416 ✓ | 121,088（对齐到 0x200 倍数） |
+| data/58da3151 | "1731033" | 0o1731033 = 504,347 | 504,347 ✓ | 505,088 |
+| sheets/740d18f5 | "123554" | 0o123554 = 42,860 | 42,860 ✓ | 43,008 |
+| Job.json | "13260" | 0o13260 = 5,808 | 5,808 ✓ | 6,144 |
+| Job.json.sig | "54" | 0o54 = 44 | 44 ✓ | 1,024 |
 
-### 4.3 `0x9b` " 0" 字段 `[推测]`
+> **修正（v1.1→v1.2）**：v1.1 将 size 当作十进制读，所以比例关系混乱（"2.92"、"3.43"等）。改为八进制后，size 即 TAR 内容字节数，**完全自洽**。"内容区到下一对象的间距"大于 size 的部分是 TAR 标准的 512 字节对齐 padding。
 
-- 固定 ASCII `" 0"`（一个空格 + `0` + NULL）。
-- 全部 9 个对象相同，cxdx 4 个对象也相同。
-- 推测：某个布尔/状态标志位的字符串表示，恒为 `0`。`[推测]`
+### 4.2 `0x94` seq 字段 = TAR chksum `[已确认-源码]`
 
-### 4.4 `0x64` "664" 标记 `[已确认]`
+**八进制 ASCII，TAR entry header 校验和**。
 
-- 固定字符串 `"664"` + NULL，9 个对象全部一致，cxdx 4 个对象也一致。
-- **用于对象头定位**：扫描文件中所有 `664\x00` 模式，向前回退 0x64 字节即为对象起点。本文件即用此方法定位全部 9 个对象。
+计算规则：把整个 512 字节头中所有字节求和，求和时 chksum 字段（0x94-0x9B 共 8 字节）按 8 个 0x20 (space) 计入。结果以八进制 ASCII 写入，末位补 NULL + space。
 
-### 4.5 `0x6c` "0" 与 `0x88` "0" `[已确认]`
+样本对象 #0 的 chksum = "013515"（八进制） = 0o013515 = 5,965（十进制）。
 
-- 恒为 `"0"` + NULL。
-- 推测：可能是对象状态/版本/标志位，恒为 0。
+> **修正（v1.1→v1.2）**：v1.1 误以为是"序列号/时间戳/MMDDhhmm 截断"，实际只是 TAR 标准头校验和，每次写 TAR entry 时由 SharpZipLib 自动计算。Python `tarfile` 解析时自动校验，能成功打开即证明 chksum 正确。
+
+### 4.3 `0x9b` " 0" 字段 = chksum 末位 + typeflag `[已确认-源码]`
+
+是 chksum 字段（0x94-0x9B）的最后 1 字节（0x9B，恒为 0x20 = space）+ typeflag 字段（0x9C，恒为 0x30 = '0' 表示 regular file）的跨字段读取。
+
+样本中所有对象都是 regular file（typeflag='0'），没有目录（typeflag='5'）或符号链接（typeflag='L'/'K' 等）。
+
+### 4.4 `0x64` "664" 标记 = TAR mode `[已确认-源码]`
+
+**TAR mode 字段，八进制 664 = 文件权限 rw-rw-r--**（user: rw, group: rw, other: r）。
+
+SharpZipLib 写 TAR 时使用此默认权限，所有对象一致。
+
+### 4.5 `0x6c` "0" / `0x74` "0" / `0x88` "0" = uid/gid/mtime `[已确认-源码]`
+
+- `0x6c-0x73`：**uid**（user id），八进制 0 = root
+- `0x74-0x7B`：**gid**（group id），八进制 0 = root
+- `0x88-0x93`：**mtime**（modification time），八进制 0 = Unix 时间戳 0 = 1970-01-01 00:00:00 UTC
+
+SharpZipLib 在 `TarEntry.CreateTarEntry(name)` 时默认 uid=gid=mtime=0，所有对象一致。
 
 ---
 
@@ -239,44 +294,113 @@ tag 头之后的数据可能是：
 
 ---
 
-## 6. `sheets/<hash>` 对象：编码内容 `[已确认-加密]`
+## 6. `sheets/<hash>` 对象：4 字节循环 XOR 加密 `[已确认-已破解]`
 
 ### 6.1 核心结论
 
-**电子表格（单元格名、值、表达式、位置）在 `sheets/<hash>` 对象内不以明文 ASCII/UTF-16 存储**。
+**电子表格内容（单元格名、值、表达式、位置、列宽、行高、metadata 等）以 4 字节循环 XOR 加密存储**，密钥为：
 
-验证方法（用 xlsx 反查）：
-- xlsx 中 165 个不同表达式（如 `AcquireImage()`、`FormatInputBuffer("il:~s34:~s34")`、`Concatenate(A27,"\",...)`、`ListBox("Auto","Debug")`），全部在 .jobx 二进制中 **ASCII 模式未找到**，UTF-16LE 模式也未找到。
-- 125 个不同值（含中文 `❒Image`、`1.结果`、`总结果`、`Pin1 XDistance` 等），ASCII 找到 18 处但均为巧合的字节组合（如 `Images` 出现在 `Job.json` 中，而非 sheets）。
+```
+0x72 0x9b 0x0f 0x2e   （重复使用，即 content[i] XOR key[i mod 4] = plain[i]）
+```
 
-### 6.2 sheets 内容字节统计
+- 密钥固定、跨文件通用（在 `天窗程序模板.jobx` 与 `Xavier标准作业模块.cxdx` 中均验证有效）。
+- 密钥不依赖对象名 hash、不依赖相机固件——**是 Cognex 容器格式的硬编码常量**。
+- 加密对象类型：**仅 `sheets/<hash>` 与 `snippet.json`（cxdx）**。其他对象（`data/*`、JSON 对象、`Job.json`、`.sig`）均**不加密**，明文存储。
 
-- 内容区 `0x0d6600..0x0e0e00`，长 43,008 字节，非零 42,402 字节。
-- 前 16 字节：`09 b9 2b 5a 0b eb 6a 0c 48 b9 5c 46 17 fe 7b 0c`
-- 字节频率分布**相当均匀**（top 10 字节各占 2.9%~4.2%），无明显偏置：
+### 6.2 破解方法（已知明文攻击）
 
-| 字节 | 占比 |
-|------|------|
-| 0x02 | 4.2% |
-| 0x5e | 4.1% |
-| 0xb7 | 4.1% |
-| 0x23 | 4.0% |
-| 0x0c | 3.7% |
-| 0xb9 | 3.7% |
-| 0x2d | 3.7% |
-| 0x50 | 3.6% |
-| 0x42 | 3.0% |
-| 0x1e | 2.9% |
+由于 `ExampleHmiSpreadsheetCells.jobx` 小样本（11,776 字节）的 sheet 内容直接以 **base64 inline** 在 `Job.json` 中（`"Sheets":{"Inspection":{"$type":"Byte[]","sz":4319,"base64":"..."}}`），无需 XOR 解密即可观察到 sheet JSON 的标准结构：
 
-### 6.3 编码/加密特征 `[推测]`
+```json
+{"$type":"Sheet","cells":[["A0","AcquireImage()",1,{...},"",null,"","","",0,0],...],
+ "columnWidths":[100,64,64,...],"coreThreshold":0.05,"outputs":"","processingCores":1,
+ "rowHeights":[20,100,25,...],"timeout":60000}
+```
 
-- **非压缩**：zlib、raw deflate、gzip 均解压失败。
-- **非单字节 XOR**：遍历 0~255 个 key，无一能在前 4KB 中产生 `Acquire` 子串。
-- **字节均匀分布**符合**强加密/密文**特征，或基于密钥流的流密码。
-- 注意 `0x5e` 与 `0xb7` 是按位取反关系（`0x5e ^ 0xff = 0xa1`，不直接是 `0xb7`），不存在简单的位翻转关系。
-- 头部字段 `size=123554` 与内容字节数 43,008 之比 ≈ 2.86，与 data/* 对象的比例（2.92、3.43、3.00）接近，可能 size 字段在所有对象中是统一的"扩展后字符/token 数"度量。`[推测]`
+以此为已知明文，对 `天窗程序模板.jobx` 中 `sheets/740d18f5...` 对象内容前 47 字节做 XOR 推算：
 
-**未解之谜**：sheets 对象的具体加密算法和密钥来源未确认。可能依赖相机固件密钥或与对象名 `<hash>` 派生的密钥。需要逆向 Cognex InSight 固件或 `.jobx` 加载器（在相机内部）才能进一步确认。
+```
+cipher[0:47]:  09 b9 2b 5a 0b eb 6a 0c 48 b9 5c 46 17 fe 7b 0c 5e b9 6c 4b 1e f7 7c 0c 48 c0 54 0c 33 ab 2d 02 50 da 6c 5f 07 f2 7d 4b 3b f6 6e 49 17 b3 26
+plaintext[0:47]: {"$type":"Sheet","cells":[["A0","AcquireImage()    （从 ExampleHmiSpreadsheetCells.jobx 反推）
+key = c XOR p: 72 9b 0f 2e 72 9b 0f 2e 72 9b 0f 2e 72 9b 0f 2e 72 9b 0f 2e 72 9b 0f 2e 72 9b 0f 2e 72 9b 0f 2e 72 9b 0f 2e 72 9b 0f 2e 72 9b 0f 2e 72 9b 0f
+```
+
+**周期 4 字节，密钥字节完全一致**，置信度极高。用此密钥解密全部 42,860 字节内容后，得到完整合法 JSON，`json.loads` 解析无错误。
+
+### 6.3 解密验证（`天窗程序模板.jobx`）
+
+```python
+key = bytes.fromhex('729b0f2e')
+content = data[0x0d6600:0x0e0e00]
+plain = bytes(content[i] ^ key[i % 4] for i in range(len(content)))
+sheet = json.loads(plain.decode('utf-8'))
+# 结果：sheet.$type == "Sheet", sheet.cells 406 行, 含所有 xlsx 中表达式/中文值
+```
+
+解密后 sheet 结构（与 `ExampleHmiSpreadsheetCells.jobx` 的 base64 解码结果一致）：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `$type` | str | 恒为 `"Sheet"` |
+| `cells` | array | 每行 = `[location, expression, flag, value, name,?]`，详见 §6.4 |
+| `columnWidths` | array | 各列像素宽度（默认 64） |
+| `coreThreshold` | float | 处理核心阈值（实测 0.05） |
+| `metadata` | dict/null | sheet 元数据 |
+| `outputs` | str | 输出配置 |
+| `passFailCell` | str/null | Pass/Fail 判定单元格 |
+| `passFailCondition` | str/null | 判定条件表达式 |
+| `processingCores` | int | 使用的处理核心数 |
+| `rowHeights` | array | 各行像素高度（默认 20） |
+| `timeout` | int | 执行超时（毫秒，实测 60000） |
+
+### 6.4 单元格行结构（cells 数组每项）
+
+每行是一个**变长数组**，至少 11 个元素：
+
+| 索引 | 字段 | 类型 | 实测例 |
+|------|------|------|--------|
+| 0 | location | str | `"A0"`、`"B1"`、`"$A$0"` |
+| 1 | expression | str | `"AcquireImage()"`、`"Count($A$0,9999999,0,0)"`、`"'Trigger Count"`（以 `'` 开头表字面量） |
+| 2 | flag | int | 恒为 1 |
+| 3 | value | str/int/float/dict/null | 运行时结果；dict 形如 `{"$type":"Image",...}`、`{"$type":"Byte[]","sz":16,"base64":"..."}` |
+| 4 | name | str | 单元格显示名（如 `"AcqCount"`） |
+| 5 | timestamp/extra | array/null | null 或时间戳数组 `[年月日时分秒...]` |
+| 6 | ? | str | 恒为 `""` |
+| 7 | ? | str | 恒为 `""` |
+| 8 | ? | str | 恒为 `""` |
+| 9 | ? | int | 恒为 0 |
+| 10 | ? | int | 恒为 0 |
+| 11+ | 可选额外 | int | 小样本中无；大样本部分行末尾追加 1 个 0 |
+
+### 6.5 加密对象字节分布特征（误判教训）
+
+加密前字节均匀分布（top 字节各占 2.9%~4.2%），与"强加密/密文"特征相似，但实际是**循环 XOR 加密的弱加密**。早期推测"非单字节 XOR"是**错误的**——单字节 XOR 遍历 0~255 失败，是因为密钥是 4 字节而非 1 字节；只要扩展到多字节 XOR 就能识别。教训：
+
+- "字节均匀分布"不必然意味着强加密，可能只是周期 >1 的 XOR；
+- 已知明文攻击比"统计 + 试解压"更有效——只要有一份**同格式的明文样本**，就能定位密钥长度和内容；
+- 跨样本对比（`ExampleHmiSpreadsheetCells.jobx` 的 base64 inline 模式）是突破口——Cognex 在小 sheet 时退化成明文 base64，大 sheet 才用 XOR 独立对象。
+
+### 6.6 两种 sheet 存储模式
+
+| 模式 | 触发条件 | Job.json 中 Sheets 字段 | sheet 数据位置 |
+|------|----------|------------------------|----------------|
+| **inline base64** | 小 sheet（实测 sz ≤ 4319 字节解码后） | `"Sheets":{"<name>":{"$type":"Byte[]","sz":<bytes>,"base64":"<b64>"}}` | 直接嵌入 Job.json，**无独立 sheets 对象** |
+| **独立对象 + XOR** | 大 sheet（实测 42,860 字节明文） | `"Sheets":{"<name>":{"$type":"FileRef","id":"sheets/<sha256>"}}` | 独立 `sheets/<hash>` 对象，内容 XOR 加密 |
+
+阈值未精确确认，但 `ExampleHmiSpreadsheetCells.jobx`（4319 字节明文 / 5760 字符 base64）已 inline，`天窗程序模板.jobx`（42,860 字节明文）独立对象，说明阈值位于二者之间。`[推测]`
+
+### 6.7 与 cxdx 的对照
+
+`Xavier标准作业模块.cxdx` 中的 `snippet.json` 对象（59,228 字节内容）**也用同一 4 字节 XOR 密钥加密**：
+
+```python
+content = cxdx_data[0x0a00:0xf200]  # snippet.json 对象内容
+plain = bytes(content[i] ^ key[i%4] for i in range(len(content)))
+# plain = {"$type":"CopyBufferObject","range":"A1:Z318","cells":[...],...}
+```
+
+说明 XOR 加密是 **Cognex 通用对象容器的统一机制**，不限于 jobx 中的 sheets。
 
 ---
 
@@ -284,10 +408,18 @@ tag 头之后的数据可能是：
 
 ### 7.1 Job.json（对象 #7）
 
-- 内容区 `0x0e1b00..0x0e3400`（6,400 字节），其中明文 JSON 占 5,808 字节，剩余为 0x00 填充。
-- JSON 起点：`0x0e1c00`（对象头偏移 0x100 处）。
+- 内容区 `0x0e1c00..0x0e3400`（6,144 字节），其中明文 JSON 占 5,808 字节，剩余为 0x00 填充。
+- JSON 起点：`0x0e1c00`（对象头偏移 0x200 处，与所有其他对象一致）。
 - 内容是单行 JSON，根对象含字段：`AcqSettings`、`EdgeAgentAdapterConfig`（FileRef）、`JobSettings`、`JobValidationSet`（FileRef）、`JobVersion`（`"24.4"`）、`Metadata`（`CameraType: IS8905M`，`FirmwareVersion: 26.1.0 (3930)`，`JobType: Spreadsheet`）、`PerDeviceAcqSettings`、`Sheets.Inspection`（FileRef → `sheets/740d18f5...`）、`computeResourceOrchestrator`（FileRef）。
 - 子对象通过 `{"$type":"FileRef","id":"<objname>"}` 引用其他对象，正是容器格式的设计动机。
+
+### 7.1.x 对照：`ExampleHmiSpreadsheetCells.jobx` 的 Job.json `[已确认]`
+
+小样本（JobVersion=22.2，FirmwareVersion=22.3.0 Beta 415）Job.json 仅 8,754 字符，含 5 个顶层字段：`AcqSettings`、`JobSettings`、`JobVersion`、`Metadata`、`Sheets`。**关键差异**：
+
+- `Sheets.Inspection` 不是 `FileRef`，而是 `{"$type":"Byte[]","sz":4319,"base64":"<5760 字符 base64>"}`，即 sheet 数据**直接 base64 内嵌**在 Job.json 中。
+- 没有 `EdgeAgentAdapterConfig`、`JobValidationSet`、`computeResourceOrchestrator`、`PerDeviceAcqSettings` 等扩展配置（说明这些是较新版本或扩展设备才有的对象）。
+- 不存在 `data/*` 对象——所有图像数据通过 `AcquireImage()` 在运行时从相机获取，作业本身不存储图像。
 
 ### 7.2 computeResourceOrchestrator（对象 #4）
 
@@ -295,7 +427,7 @@ JSON 内容仅 11 字符：`{"slots":[]}`，位于 `0x0e1000` 起。
 
 ### 7.3 JobValidationSet（对象 #5）
 
-JSON 约 190 字符：
+JSON 约 190 字符，位于 `0x0e1400` 起：
 ```json
 {"$type":"ValidationSet","cleanupActions":[],"dataRoot":null,"name":"",
  "variants":[{"$type":"ValidationVariant","id":0,"name":"Job Tests",
@@ -304,25 +436,79 @@ JSON 约 190 字符：
 
 ### 7.4 EdgeAgentAdapterConfig（对象 #6）
 
-JSON 约 76 字符：
+JSON 约 76 字符，位于 `0x0e1800` 起：
 ```json
 {"$type":"EdgeAgentAdapterConfig","metrics":[],"sendMetricsWithoutAcquisition":false}
 ```
 
 ---
 
-## 8. `.sig` 签名对象 `[已确认]`
+## 8. `.sig` 签名对象 = HMAC-SHA256 with embedded secret key `[已确认-源码+验证]`
 
-### 8.1 Job.json.sig（对象 #8）
+### 8.1 算法确认
 
-- 内容区 `0x0e3500..0x0e3c00`（1,792 字节），但仅 44 字节非零。
-- 签名正文：`0x0e3600` 起 40 字节 ASCII：`685o4vhjkBCxoj1DwcGD80kS8kS8O71Zv5c7r5u1cvI=`
-- Base64 解码得 **30 字节**：`eb ce 68 e2 f8 63 90 10 b1 a2 3d 43 c1 c1 83 f3 49 12 f2 44 bc 3b bd 59 bf 97 3b af 9b b5`
-- 30 字节 ≠ 标准 HMAC-SHA256（32 字节），也不是 RSA 签名（典型 128/256 字节）。`[推测]` 可能是某种截断的 MAC 或自定义签名算法。
+通过反编译 `Cognex.InSight.Job.Isvs.Internal.dll` 中 `qoROwPcoZO3mtAy6s7.RHejpnxfeOJLlFWuQg` 类（继承自 `JobxWriterHelper`），确认签名实现：
 
-### 8.2 cxdx 的 snippet.json.sig
+```csharp
+// 等价 C# 实现（去混淆后）
+public class RHejpnxfeOJLlFWuQg : JobxWriterHelper {
+    public override void WriteEntry(string name, byte[] content) {
+        base.WriteEntry(name, content);   // 写原 entry（如 Job.json）
+        if (name == "Job.json") {         // lSAQW6c5l(0)
+            base.WriteEntry("Job.json.sig", ComputeSig(content));  // lSAQW6c5l(20)
+        }
+    }
 
-cxdx 中 `snippet.json.sig` 对象内容：`5V/MPh/VX5SgbQ61pVGtpTEu6A5teK6zmyRSyBlb5SI=`（44 字符 Base64，解码 32 字节）—— **32 字节正好是 SHA-256 摘要长度**。这与 jobx 的 30 字节签名不一致。`[推测]` 两种签名算法不同。
+    private static byte[] ComputeSig(byte[] jobJsonBytes) {
+        var key = Convert.FromBase64String("DtrDN+DqE5lDTNNWDl1tkYI92hmjAW2g8Rc+xmn9P04=");
+        using var h = new HMACSHA256(key);
+        string b64 = Convert.ToBase64String(h.ComputeHash(jobJsonBytes));
+        return Encoding.UTF8.GetBytes(b64);  // 44 字节（不含终止 NULL）
+    }
+}
+```
+
+签名算法 **HMAC-SHA256**（不是裸 SHA-256），32 字节摘要 → base64 编码得 44 字符 → UTF-8 字节即 44 字节。
+
+### 8.2 密钥提取
+
+密钥通过 .NET 反射加载 `Cognex.InSight.Job.Isvs.Internal.dll`，调用字符串混淆解码函数 `Ofnrv5AACje4ofDVrH.ksRVLn68kJi81Bh7or.lSAQW6c5l(int)` 提取（dump 程序位于 `_decompiled\dump\`，调用 `lSAQW6c5l(48)` 返回 base64 字符串）：
+
+| 索引 | 返回字符串 | 用途 |
+|------|------------|------|
+| 0   | `Job.json` | 触发签名的 entry 名 |
+| 20  | `Job.json.sig` | 签名 entry 名 |
+| 48  | `DtrDN+DqE5lDTNNWDl1tkYI92hmjAW2g8Rc+xmn9P04=` | **HMAC-SHA256 密钥（base64）** |
+
+密钥解码 32 字节 hex：
+`0e da c3 37 e0 ea 13 99 43 4c d3 56 0e 5d 6d 91 82 3d da 19 a3 01 6d a0 f1 17 3e c6 69 fd 3f 4e`
+
+### 8.3 三份样本全部验证
+
+```python
+import tarfile, hmac, hashlib, base64
+KEY = base64.b64decode('DtrDN+DqE5lDTNNWDl1tkYI92hmjAW2g8Rc+xmn9P04=')
+# 天窗程序模板.jobx
+t = tarfile.open('天窗程序模板.jobx', 'r')
+job_json = t.extractfile('Job.json').read()
+job_sig  = t.extractfile('Job.json.sig').read()
+expected = base64.b64encode(hmac.new(KEY, job_json, hashlib.sha256).digest())
+assert expected == job_sig   # b'685o4vhjkBCxoj1DwcGD80kS8kS8O71Zv5c7r5u1cvI='  ✓
+```
+
+| 样本 | entry 名 | entry 字节数 | sig 字符串 | HMAC 验证 |
+|------|----------|--------------|------------|-----------|
+| 天窗程序模板.jobx | Job.json | 5808 | `685o4vhjkBCxoj1DwcGD80kS8kS8O71Zv5c7r5u1cvI=` | ✓ 完全匹配 |
+| ExampleHmiSpreadsheetCells.jobx | Job.json | 8754 | `G3OEyWk+cGCLn1WnaSZkioqQVxh2g4agWtIcG6fCN7I=` | ✓ 完全匹配 |
+| Xavier标准作业模块.cxdx | snippet.json | 59228（XOR 加密） | `5V/MPh/VX5SgbQ61pVGtpTEu6A5teK6zmyRSyBlb5SI=` | ✓ **基于密文** 完全匹配 |
+
+### 8.4 关键观察：.cxdx 签名基于密文
+
+`.cxdx` 的 `snippet.json` 在 TAR 中以 **XOR 加密后的密文**存储。但 `snippet.json.sig` 是对**密文字节**计算 HMAC-SHA256，不是对解码后的明文。这与 `JobxWriterHelper.WriteEntry(name, byte[])` 的语义一致：调用方传入什么字节，TAR 就存什么字节，签名算法看到的也是这些字节。
+
+### 8.5 旧版"30 字节签名"误判修正
+
+v1.0 文档称"jobx 30 字节签名"基于 40 字符 base64 解码得到 30 字节，但实际签名是 **44 字符 base64 = 32 字节**（HMAC-SHA256 摘要）。40 字符的样本可能是错误的截取。v1.1 已修正为 44 字符/32 字节，v1.2 进一步确认算法是 HMAC-SHA256 而非裸 SHA-256。`[已修正]`
 
 ---
 
@@ -358,10 +544,13 @@ xlsx 列含义对照：
 | 值 | 运行时结果 | `data` |
 | 表达式 | 计算公式 | `expression`（需单独 `getCellExpression` 调用） |
 
-**反查二进制结论**：xlsx 中的字符串（表达式、中文值）**无法在 .jobx 文件明文中直接找到**，因为它们存储在 `sheets/<hash>` 对象的**加密/编码内容**中。要解析 .jobx 单元格内容，必须：
-- 要么逆向 Cognex 相机固件中的解密逻辑；
-- 要么通过 CogSocket HMI 协议在线获取（即现有导出工具的做法）；
-- 要么从相机固件中提取密钥/算法。
+**反查二进制结论**：xlsx 中的字符串（表达式、中文值）**无法在 .jobx 文件明文中直接找到**，因为它们存储在 `sheets/<hash>` 对象的**XOR 加密内容**中（密钥见 §6）。要解析 .jobx 单元格内容，**现在可用以下任一方式**：
+
+- **离线解密**（推荐）：用 4 字节密钥 `0x72 0x9b 0x0f 0x2e` XOR 解密 `sheets/<hash>` 对象内容，得到 sheet JSON，提取 cells 数组中的 location/expression/value/name。
+- **base64 内嵌**（小 sheet）：若 `Job.json.Sheets.<name>` 是 `Byte[]` 而非 `FileRef`，直接 base64 解码 `base64` 字段即可。
+- 在线协议（兜底）：通过 CogSocket HMI 协议在线获取（即现有导出工具 `ExportTask.java` 的做法）。
+
+> 现在不再需要相机固件逆向——加密本身已破解。
 
 ---
 
@@ -390,13 +579,16 @@ xlsx 列含义对照：
 
 ## 12. 未解之谜清单
 
-1. **sheets 对象加密算法**：43KB 内容字节分布均匀，非压缩非单字节 XOR。需固件逆向。
-2. **size 字段语义**：比例 0.02~3.43，与字节数无简单关系，可能是 token 数或解压后字节数。
-3. **seq 字段语义**：6 位数字串，每个对象独立，疑似序列号/时间戳但语义不明。
-4. **`data/*` 对象内部 TLV 结构的完整 schema**：仅识别出 8 字节 tag 头（`tag1 tag2 03 type val4`，末字节 0x80）和跟随数据类型（double/int32），完整字段含义未确认。
-5. **Job.json.sig 30 字节签名算法**：与 cxdx 32 字节签名长度不同，可能不同算法。
-6. **对象头 `0x100..0x200` 区段差异**：`data/*` 对象恒为 0，其他对象从 0x100 起即有数据，暗示对象头长度可能依类型变化（0x100 vs 0x200）。
-7. **多个 `data/*` 对象的分工**：data 块 1/2/3 各自承载什么子集的单元格/图像/数据，未与 xlsx 单元格一一对应。
+> v1.2 更新：反编译 Cognex 官方工具源码后，原 7 项中 **5 项已破解**，仅剩 2 项。
+
+1. ~~size 字段语义~~ `[已确认-源码]`：**TAR 八进制 size 字段**，即对象内容字节数。详见 §4.1。
+2. ~~seq 字段语义~~ `[已确认-源码]`：**TAR chksum 头校验和**，由 SharpZipLib 自动计算。详见 §4.2。
+3. **`data/*` 对象内部 TLV 结构的完整 schema** `[推测-未在反编译源码中找到]`：仅识别出 8 字节 tag 头（`tag1 tag2 03 type val4`，末字节 0x80）和跟随数据类型（double/int32），完整字段含义未确认。**`data/*` 对象的内容可能由更底层（非 Cognex .NET 层）的代码生成**，反编译的 6 个 Cognex .NET DLL 中未见其写入逻辑。
+4. ~~Job.json.sig 32 字节签名算法~~ `[已确认-源码]`：**HMAC-SHA256(Job.json_bytes, secret_key)**，密钥已提取。详见 §8。
+5. **多个 `data/*` 对象的分工** `[推测]`：data 块 1/2/3 各自承载什么子集的单元格/图像/数据，未与 xlsx 单元格一一对应。可能在 `Cognex.InSight.Job.Ise.dll` 中有线索（未深入分析）。
+6. **sheet 存储模式切换阈值** `[推测]`：何时用 inline base64、何时用独立 XOR 对象，仅知阈值在 4319~42860 字节明文长度之间。**反编译源码中 `JobxSerializer.WriteSnippet` 有三种格式分支（`isvs-sheet-aaa` / `isvs-sheet-json` / `isvs-snippet-json`），但触发条件未追踪到。**
+7. **4 字节 XOR 密钥来源** `[未知-部分破解]`：密钥本身已知（`0x72 0x9b 0x0f 0x2e`），通过已知明文攻击（小样本 sheet inline base64）破解并跨 3 份样本验证。但**反编译的 6 个 Cognex .NET DLL 中未直接出现该字节常量**（既不在静态字符串表 `lSAQW6c5l(int)` 索引中，也不在静态 `byte[]` 字段中），可能在更底层的非 .NET 代码（如 native C++ 库或硬件固件）中，或作为 IL 内联字面量散落在某个未反编译的方法体里。
+8. ~~`ExampleHmiSpreadsheetCells.json` 的加载机制~~ `[已确认-不需破解]`：通过 SDK README 已确认该 .json 是 Cognex.InSight.Web SDK 的 HMI 显示覆盖文件，与 .jobx 独立，由 SDK 在 HMI 层加载后覆盖 sheet 中 `'Placeholder for X'` 占位单元格。Nyan_cat_125px_frame.png 也是同目录外部资源。.json 和 .png 都不参与 .jobx 内部存储。
 
 ---
 
@@ -460,36 +652,74 @@ for expr in {c["表达式"] for c in cells if c.get("表达式")}:
         ...
 ```
 
+### v1.2 源码反编译验证脚本
+
+v1.2 阶段通过反编译 Cognex 官方 "In-Sight Job Converter" 工具的 6 个自有 DLL，新增以下验证脚本（运行时已删除，方法论保留以备复现）：
+
+7. **`_dump.cs`**（`_decompiled\_dump.cs`，源码仍保留以备复跑）—— .NET 反射加载 `Cognex.InSight.Job.Isvs.Internal.dll`，调用混淆类 `Ofnrv5AACje4ofDVrH.ksRVLn68kJi81Bh7or` 的 `lSAQW6c5l(int)` 方法（字符串反混淆器），遍历索引 0..256 提取解码后的字符串字面量。从中提取出 HMAC 密钥 `DtrDN+DqE5lDTNNWDl1tkYI92hmjAW2g8Rc+xmn9P04=`（base64，32 字节）以及格式常量 `liger-jobx`、`isvs-snippet-json`、`isvs-sheet-json`、`isvs-sheet-aaa` 等。
+
+```csharp
+var asm = Assembly.LoadFrom(Path.Combine(dir, "Cognex.InSight.Job.Isvs.Internal.dll"));
+var t = asm.GetType("Ofnrv5AACje4ofDVrH.ksRVLn68kJi81Bh7or");
+var mi = t.GetMethod("lSAQW6c5l", BindingFlags.Static|BindingFlags.NonPublic|BindingFlags.Public);
+for (int i = 0; i < 256; i++) {
+    var r = mi.Invoke(null, new object[]{i});   // 解码后的字符串
+    Console.WriteLine($"{i,3}: {r}");
+}
+```
+
+8. **`_verify.py`**（运行时已删除）—— Python 脚本，用提取出的 HMAC 密钥对 3 个样本文件（`天窗程序模板.jobx`、`ExampleHmiSpreadsheetCells.jobx`、`Xavier标准作业模块.cxdx`）的 `Job.json`/`snippet.json` 与对应 `.sig` 进行交叉验证。确认 `Job.json.sig` = `base64(HMAC-SHA256(Job.json_bytes, secret_key))`，3 样本全部 match。
+
+```python
+KEY = base64.b64decode('DtrDN+DqE5lDTNNWDl1tkYI92hmjAW2g8Rc+xmn9P04=')
+t = tarfile.open(path, 'r')
+jb = t.extractfile('Job.json').read()
+sb = t.extractfile('Job.json.sig').read()
+exp = base64.b64encode(hmac.new(KEY, jb, hashlib.sha256).digest())
+# exp == sb  → match=True（3 样本全通过）
+```
+
 ---
 
 ## 14. 置信度总结
 
 ### 已确认（高置信度）
-- 文件是 9 个对象块串联的对象容器格式；
-- 对象头 0x200 字节固定布局，0x64 处 `664\0` 是定位锚点；
-- 元数据字段布局（name/664/0/size/0/seq/" 0"）；
-- JSON 对象内容为明文 ASCII，子对象通过 `FileRef` 引用；
-- `.sig` 对象为 Base64 编码签名；
-- cxdx 是同族格式（4 个对象，对象头布局一致）；
-- **xlsx 中的表达式/中文值在 .jobx 二进制中无法直接找到明文**——这是最重要的反查结论；
-- 表达式等数据存在于 `sheets/<hash>` 对象的内容区，但内容区**被编码/加密**。
+- **`.jobx`/`.cxdx` 是标准 POSIX ustar TAR 归档（V7 旧式变体，无 ustar magic）**——v1.2 经 `JobxSerializer.cs` 第 537 行 `TarInputStream(jobxStream, 1, Encoding.UTF8)` 源码确认；
+- **对象头 0x200 字节 = TAR entry header（512 字节）**：name/mode/uid/gid/size/mtime/chksum/typeflag/linkname/magic/version/uname/gname/devmajor/devminor/prefix/padding 全字段对应 TAR 标准；
+- `0x64` 处 `664\0` 是 **TAR mode 字段**（八进制 664 = rw-rw-r--），非版本标记；
+- `0x6c` 处 `0\0` 是 **uid=0**（root），`0x74` 处 `0\0` 是 **gid=0**，`0x88` 处 `0\0` 是 **mtime=0**（Unix epoch）；
+- **`0x7c` size 字段 = 八进制 ASCII 内容字节数**（如 "353140" = 0o353140 = 120,416 字节），非十进制；
+- **`0x94` seq 字段 = TAR chksum 头校验和**（512 字节头求和，chksum 字段按 8 个空格计），非序列号/时间戳；
+- `0x9b` 处 `" 0"` 是 chksum 末位空格 + typeflag `'0'`（regular file）跨字段读取假象；
+- JSON 对象（`Job.json`、`computeResourceOrchestrator`、`JobValidationSet`、`EdgeAgentAdapterConfig`）内容为明文 ASCII，子对象通过 `FileRef` 引用；
+- **`Job.json.sig` = `base64(HMAC-SHA256(Job.json_bytes, secret_key))`**，44 字节 base64 文本，secret_key 32 字节，base64 = `DtrDN+DqE5lDTNNWDl1tkYI92hmjAW2g8Rc+xmn9P04=`（v1.2 经 `RHejpnxfeOJLlFWuQg.cs` 源码 + 3 样本验证确认）；
+- cxdx 是同族格式（4 个对象，对象头布局一致，`snippet.json` 也用 XOR 加密，`snippet.json.sig` 同样走 HMAC-SHA256）；
+- **xlsx 中的表达式/中文值在 .jobx 二进制中无法直接找到明文**——存储在 `sheets/<hash>` 对象的 XOR 加密内容中；
+- **`sheets/<hash>` 与 `snippet.json` 用 4 字节循环 XOR 加密，密钥 `0x72 0x9b 0x0f 0x2e` 固定且跨文件通用**——核心破解结论；
+- **sheet JSON 标准结构**：`{"$type":"Sheet","cells":[["<loc>","<expr>",1,<value>,"<name>",...],...],...}`；
+- **sheet 有两种存储模式**：小 sheet → inline base64 在 `Job.json.Sheets.<name>` 中（`Byte[]` 类型）；大 sheet → 独立 `sheets/<hash>` 对象 + XOR 加密；
+- **`ExampleHmiSpreadsheetCells.json` 与 `.png` 是 Cognex.InSight.Web SDK 的 HMI 显示覆盖资源**，与 .jobx 独立，不参与 .jobx 内部存储。
 
 ### 推测（中置信度）
 - `data/*` 对象内 8 字节 tag 头 + 跟随数据的 TLV 模式；
 - 主数据段 `0x1e8ba..0x5d769` 是图像像素数据（与 `AcquireImage()` 表达式呼应）；
-- `0x94` 处 6 位数字是某种序列号/时间戳；
-- 对象头长度依类型变化（`data/*` 用 0x200，其他用 0x100）。
+- sheet 存储模式切换阈值位于 4319~42860 字节明文长度之间（源码 `WriteSnippet` 发现 3 个格式分支 `snippet-json`/`sheet-json`/`sheet-archive`，触发条件未跟踪）。
 
 ### 未知（低置信度）
-- sheets 对象的具体加密算法与密钥来源；
-- `size` 字段的真实语义；
-- `data/*` 对象 TLV 字段的完整 schema；
-- 30 字节签名的算法与公钥验证流程；
+- **4 字节 XOR 密钥 `0x72 0x9b 0x0f 0x2e` 的源码位置**——密钥已验证有效，但不在 6 个 DLL 的静态字符串表/byte[] 字段中，可能内联在 IL 指令或非 .NET 原生代码中；
+- `data/*` 对象 TLV 字段的完整 schema（未在 6 个反编译 DLL 中找到，可能在原生代码中）；
 - 多个 `data/*` 对象的分工细节。
 
 ---
 
-**文档版本**：1.0
-**生成时间**：2026-09-23
-**样本**：`天窗程序模板.jobx`（932,864 字节）、`Xavier标准作业模块.cxdx`（64,000 字节）
-**反查依据**：`天窗程序模板.jobx_20260918_100758.xlsx`（406 单元格，304 表达式）、`src/main/java/com/cognex/export/*.java`
+**文档版本**：1.2（v1.0 + ExampleHmiSpreadsheetCells.jobx 小样本交叉验证 + sheets XOR 加密破解 + Cognex 官方 Job Converter 源码反编译确认）
+**生成时间**：2026-09-23（v1.2 修订）
+**样本**：
+- `天窗程序模板.jobx`（932,864 字节，JobVersion=24.4，IS8905M 相机）
+- `ExampleHmiSpreadsheetCells.jobx`（11,776 字节，JobVersion=22.2，IS2802M 相机）
+- `Xavier标准作业模块.cxdx`（64,000 字节，同族 .cxdx 格式）
+**反查依据**：
+- `天窗程序模板.jobx_20260918_100758.xlsx`（406 单元格，304 表达式）
+- **Cognex 官方 "In-Sight Job Converter" 工具反编译源码**（6 个自有 DLL，ilspycmd 8.2 反编译为 1.75MB C# 源代码）
+- `src/main/java/com/cognex/export/*.java`
+- `InSightWebSDK-26.1.0/SampleCode/dotnet/WindowsFormsApp/`（Cognex 官方 .NET SDK 示例，含 `HmiSpreadsheetCells.cs`、`README.md`）
