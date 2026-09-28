@@ -86,7 +86,8 @@ public class JobxWriter {
 
     // ======================== TAR 写入 ========================
 
-    private static void writeTarEntry(OutputStream out, String name, byte[] content) throws IOException {
+    /** 写单个 TAR 条目（头 + 内容 + 对齐填充）。公开供 i18n 字节级回写复用。 */
+    public static void writeTarEntry(OutputStream out, String name, byte[] content) throws IOException {
         byte[] header = makeTarHeader(name, content.length);
         out.write(header);
         out.write(content);
@@ -96,7 +97,8 @@ public class JobxWriter {
         }
     }
 
-    private static void writeEndOfArchive(OutputStream out) throws IOException {
+    /** 写两块 512 字节全 0 结束标记。公开供 i18n 字节级回写复用。 */
+    public static void writeEndOfArchive(OutputStream out) throws IOException {
         // 两块 512 字节全 0 = TAR 结束标记 / Two 512-byte zero blocks = end-of-archive marker
         out.write(new byte[512]);
         out.write(new byte[512]);
@@ -164,7 +166,8 @@ public class JobxWriter {
 
     // ======================== XOR / HMAC ========================
 
-    private static byte[] xor(byte[] data) {
+    /** 4 字节循环 XOR（对称，加解密同一函数）。公开供 i18n 回写复用。 */
+    public static byte[] xor(byte[] data) {
         byte[] out = new byte[data.length];
         for (int i = 0; i < data.length; i++) {
             out[i] = (byte) (data[i] ^ XOR_KEY[i & 3]);
@@ -176,8 +179,9 @@ public class JobxWriter {
      * 计算 HMAC-SHA256 签名（§8.1）：
      *   digest = HMAC-SHA256(HMAC_KEY, data)
      *   sig_bytes = UTF-8( base64(digest) )   // 44 字节
+     * 公开供 i18n 重签复用。
      */
-    private static byte[] computeSig(byte[] data) throws IOException {
+    public static byte[] computeSig(byte[] data) throws IOException {
         try {
             byte[] key = Base64.getDecoder().decode(HMAC_KEY_BASE64);
             Mac mac = Mac.getInstance("HmacSHA256");

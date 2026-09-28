@@ -150,6 +150,14 @@ java -jar jobx文件备份助手_<时间戳>.jar generate <script.js> [--out <di
 #   --no-sig             不写 .sig 签名文件（默认写 HMAC-SHA256 签名）
 #   输出: {base}_yyyyMMdd_HHmmss.jobx/.cxdx/.xlsx，签名默认开启
 
+# 中译英（交付国外用户，两阶段；训练态 saved 与 data/* 原样保留并重算签名，不连相机）
+# 阶段1 抽取中文串到 JSON（name/comment/字符串 value/表达式中文文本）：
+java -jar jobx文件备份助手_<时间戳>.jar i18n-extract <file.jobx|file.cxdx> [--out <map.json>]
+# 阶段2 人工或 LLM 在 JSON 的 strings[].en 填好英文后回写：
+java -jar jobx文件备份助手_<时间戳>.jar i18n-apply <file> --map <map.json> [--out <dir>] [--name <base>] [--no-sig]
+#   输出: {stem}_en_yyyyMMdd_HHmmss.jobx/.cxdx（源文件同目录，默认带 HMAC-SHA256 签名）
+#   保证: cell[5] saved 训练状态与 data/* 训练块逐字节保留，公式/引用/样式/sheet 名不动
+
 # 帮助与版本
 java -jar jobx文件备份助手_<时间戳>.jar --help | -h
 java -jar jobx文件备份助手_<时间戳>.jar --version | -v
@@ -180,9 +188,13 @@ java -jar jobx文件备份助手_20260928105112.jar export --all --out D:/export
 # 生成器：执行 JS 脚本生成三种格式 / 仅生成 .jobx 且不写签名
 java -jar jobx文件备份助手_20260928105112.jar generate presence.js --format all
 java -jar jobx文件备份助手_20260928105112.jar generate presence.js --format jobx --no-sig --name out
+
+# 中译英：先抽取，翻译 JSON 后回写（训练态与训练块逐字节保留）
+java -jar jobx文件备份助手_20260928105112.jar i18n-extract "jobx/天窗程序模板.jobx"
+java -jar jobx文件备份助手_20260928105112.jar i18n-apply "jobx/天窗程序模板.jobx" --map "jobx/天窗程序模板.i18n.json"
 ```
 
-退出码：`0` 成功；`1` 执行失败（解析失败 / 备份或导出至少一台失败 / 配置中没有相机 / 生成器脚本或文件生成失败）；`2` 参数错误。
+退出码：`0` 成功；`1` 执行失败（解析失败 / 备份或导出至少一台失败 / 配置中没有相机 / 生成器脚本或文件生成失败 / i18n-apply 后仍有中文未译）；`2` 参数错误。
 
 > 备份 / 导出 CLI 子命令需要先在 GUI 中维护 `backup-config.json` / `export-config.json`（相机 IP / 端口 / 凭证 / FTPS 等参数）。也可通过 `--config <file>` 指向不同的配置文件，以便维护多套配置档案（如生产 vs 测试）。端到端备份 / 导出需要实机相机连接。生成器 CLI 不需要任何配置文件，纯离线运行；脚本中调用 `jobx.output({...})` 会覆盖 CLI 参数。
 
@@ -406,6 +418,15 @@ java -jar jobx文件备份助手_<timestamp>.jar generate <script.js> [--out <di
 #   --no-sig             skip writing the .sig signature file (HMAC-SHA256 signature is written by default)
 #   Output: {base}_yyyyMMdd_HHmmss.jobx/.cxdx/.xlsx; signature on by default
 
+# Chinese to English localization (for overseas delivery; two phases, no camera;
+# trained saved state and data/* blobs kept byte-identical, signature recomputed)
+# Phase 1: extract Chinese strings to JSON (name/comment/string value/expression text):
+java -jar jobx文件备份助手_<timestamp>.jar i18n-extract <file.jobx|file.cxdx> [--out <map.json>]
+# Phase 2: after a human or LLM fills strings[].en in the JSON:
+java -jar jobx文件备份助手_<timestamp>.jar i18n-apply <file> --map <map.json> [--out <dir>] [--name <base>] [--no-sig]
+#   Output: {stem}_en_yyyyMMdd_HHmmss.jobx/.cxdx (next to source; HMAC-SHA256 signed by default)
+#   Guarantees: cell[5] saved training state and data/* blobs byte-preserved; formulas, refs, styles, sheet names untouched
+
 # Help and version
 java -jar jobx文件备份助手_<timestamp>.jar --help | -h
 java -jar jobx文件备份助手_<timestamp>.jar --version | -v
@@ -436,9 +457,13 @@ java -jar jobx文件备份助手_20260928105112.jar export --all --out D:/export
 # Generator: run a JS script producing all three formats / only .jobx and skip the signature
 java -jar jobx文件备份助手_20260928105112.jar generate presence.js --format all
 java -jar jobx文件备份助手_20260928105112.jar generate presence.js --format jobx --no-sig --name out
+
+# Localize to English: extract, translate the JSON, then apply (trained state and blobs byte-preserved)
+java -jar jobx文件备份助手_20260928105112.jar i18n-extract "jobx/天窗程序模板.jobx"
+java -jar jobx文件备份助手_20260928105112.jar i18n-apply "jobx/天窗程序模板.jobx" --map "jobx/天窗程序模板.i18n.json"
 ```
 
-Exit codes: `0` success; `1` execution failure (parse failure / one or more cameras failed backup or export / config has no cameras / generator script or file generation failed); `2` argument error.
+Exit codes: `0` success; `1` execution failure (parse failure / one or more cameras failed backup or export / config has no cameras / generator script or file generation failed / untranslated Chinese remaining after i18n-apply); `2` argument error.
 
 > The backup / export CLI subcommands require `backup-config.json` / `export-config.json` (camera IP / port / credentials / FTPS settings) to be maintained via the GUI first. You can also point to a different config file with `--config <file>` to keep multiple profiles (e.g. production vs. test). End-to-end backup / export requires a live camera connection. The generator CLI needs no config file and runs fully offline; calling `jobx.output({...})` inside the script overrides the CLI parameters.
 

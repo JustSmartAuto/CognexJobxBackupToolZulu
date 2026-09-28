@@ -1,0 +1,959 @@
+{
+    "source":  "D:\\JustStupid\\jobx表格编辑器_2604270917\\CognexJobxBackupToolZulu\\jobx\\天窗程序模板.jobx",
+    "format":  "jobx",
+    "note":  "在每条 strings[].en 填入英文译文；留空表示保留中文不翻译。必须保留占位符（%f/%1.2f/\\n 等）、数字与单位；表达式字面量不要改动引号外的任何内容。",
+    "strings":  [
+                    {
+                        "zh":  "1.结果",
+                        "en":  "1. Result",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A2",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A2",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "总结果",
+                        "en":  "Overall Result",
+                        "occurrences":  4,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A3",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A3",
+                                             "field":  "expr"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "D17",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "D17",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "输出结果",
+                        "en":  "Output Result",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "B3",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "B3",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "2.输出与通讯",
+                        "en":  "2. Output \u0026 Communication",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A11",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A11",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "接收PLC程序段指令（条件号）",
+                        "en":  "Receive PLC segment command (condition number)",
+                        "occurrences":  1,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "E13",
+                                             "field":  "comment"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "随机数确保结果唯一",
+                        "en":  "Random number ensures unique result",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A17",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A17",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "角度",
+                        "en":  "Angle",
+                        "occurrences":  8,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "F17",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "F17",
+                                             "field":  "expr"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "H46",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "H46",
+                                             "field":  "expr"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "F63",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "F63",
+                                             "field":  "expr"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "F68",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "F68",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "3.选择程序段",
+                        "en":  "3. Select Program Segment",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A18",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A18",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "4.图片保存",
+                        "en":  "4. Image Save",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A25",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A25",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "工站名",
+                        "en":  "Station Name",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "B26",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "B26",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "产品类型",
+                        "en":  "Product Type",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "C26",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "C26",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "结果",
+                        "en":  "Result",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "D26",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "D26",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "只保存NG图片",
+                        "en":  "Save NG Images Only",
+                        "occurrences":  1,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "B34",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "文件类型",
+                        "en":  "File Type",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A35",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A35",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "图像分辨率",
+                        "en":  "Image Resolution",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "B35",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "B35",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "重叠图形",
+                        "en":  "Overlap Graphics",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "C35",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "C35",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "重设",
+                        "en":  "Reset",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "D35",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "D35",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "完全",
+                        "en":  "Full",
+                        "occurrences":  1,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "B36",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "半",
+                        "en":  "Half",
+                        "occurrences":  1,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "B36",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "四分之一",
+                        "en":  "Quarter",
+                        "occurrences":  1,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "B36",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "无重叠",
+                        "en":  "No Overlap",
+                        "occurrences":  1,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "C36",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "SVG 重叠",
+                        "en":  "SVG Overlap",
+                        "occurrences":  1,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "C36",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "在图像上呈现",
+                        "en":  "Display on Image",
+                        "occurrences":  1,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "C36",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "5.标定",
+                        "en":  "5. Calibration",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A38",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A38",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "棋盘格标定",
+                        "en":  "Checkerboard Calibration",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A40",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A40",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "点数",
+                        "en":  "Point Count",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "B40",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "B40",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "均值错误",
+                        "en":  "Mean Error",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "C40",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "C40",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "最大错误",
+                        "en":  "Max Error",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "D40",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "D40",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "九点标定",
+                        "en":  "Nine-Point Calibration",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A44",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A44",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "启用",
+                        "en":  "Enable",
+                        "occurrences":  1,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "B44",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "图像坐标X",
+                        "en":  "Image X",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A45",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A45",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "图像坐标Y",
+                        "en":  "Image Y",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "B45",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "B45",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "索引",
+                        "en":  "Index",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "E46",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "E46",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "缩放比例",
+                        "en":  "Scale Factor",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "I46",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "I46",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "得分",
+                        "en":  "Score",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "J46",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "J46",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "点位显示启用",
+                        "en":  "Enable Point Display",
+                        "occurrences":  1,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "G50",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "记录",
+                        "en":  "Record",
+                        "occurrences":  9,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A51",
+                                             "field":  "expr"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A52",
+                                             "field":  "expr"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A53",
+                                             "field":  "expr"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A54",
+                                             "field":  "expr"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A55",
+                                             "field":  "expr"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A56",
+                                             "field":  "expr"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A57",
+                                             "field":  "expr"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A58",
+                                             "field":  "expr"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A59",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "6. 产品角度",
+                        "en":  "6. Product Angle",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A63",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A63",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "段结果",
+                        "en":  "Segment Result",
+                        "occurrences":  4,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "D63",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "D63",
+                                             "field":  "expr"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "D80",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "D80",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "基准位置",
+                        "en":  "Reference Position",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A64",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A64",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "训练区域",
+                        "en":  "Train Region",
+                        "occurrences":  1,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A67",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "训练",
+                        "en":  "Train",
+                        "occurrences":  1,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "B67",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "宽度",
+                        "en":  "Width",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "D68",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "D68",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "高度",
+                        "en":  "Height",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "E68",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "E68",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "曲线",
+                        "en":  "Curve",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "G68",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "G68",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "搜索区域",
+                        "en":  "Search Region",
+                        "occurrences":  1,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A69",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "判断",
+                        "en":  "Judgment",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A72",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A72",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "空料",
+                        "en":  "Empty Material",
+                        "occurrences":  1,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "B73",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "显示",
+                        "en":  "Display",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A75",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A75",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "显示颜色",
+                        "en":  "Display Color",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "B75",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "B75",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "显示文本1",
+                        "en":  "Display Text 1",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "C75",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "C75",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "显示文本2",
+                        "en":  "Display Text 2",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "D75",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "D75",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "显示位置",
+                        "en":  "Display Position",
+                        "occurrences":  1,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A76",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "角度: 6.4",
+                        "en":  "Angle: 6.4",
+                        "occurrences":  1,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "D76",
+                                             "field":  "value"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "角度: %.1f",
+                        "en":  "Angle: %.1f",
+                        "occurrences":  1,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "D76",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    },
+                    {
+                        "zh":  "7. 点胶有无",
+                        "en":  "7. Glue Presence",
+                        "occurrences":  2,
+                        "contexts":  [
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A80",
+                                             "field":  "value"
+                                         },
+                                         {
+                                             "sheet":  "Inspection",
+                                             "location":  "A80",
+                                             "field":  "expr"
+                                         }
+                                     ]
+                    }
+                ]
+}

@@ -11,6 +11,7 @@ import com.cognex.generator.Generator;
 import com.cognex.generator.GeneratorJsApi;
 import com.cognex.generator.GeneratorScriptEngine;
 import com.cognex.generator.GeneratorJob;
+import com.cognex.i18n.JobxI18n;
 import com.cognex.parser.JobxParser;
 import com.cognex.parser.ParserXlsxExporter;
 import com.formdev.flatlaf.FlatLightLaf;
@@ -37,6 +38,9 @@ public class Main {
                 System.exit(code);
             } else if ("generate".equals(cmd) || "g".equals(cmd)) {
                 int code = runGenerate(args);
+                System.exit(code);
+            } else if ("i18n-extract".equals(cmd) || "i18n-apply".equals(cmd)) {
+                int code = "i18n-extract".equals(cmd) ? runI18nExtract(args) : runI18nApply(args);
                 System.exit(code);
             } else if ("--help".equals(cmd) || "-h".equals(cmd) || "help".equals(cmd)) {
                 printHelp();
@@ -415,6 +419,116 @@ public class Main {
         return dot > 0 ? name.substring(0, dot) : name;
     }
 
+    /**
+     * CLI 子命令阶段 1：抽取 .jobx / .cxdx 中的中文可翻译字符串 → JSON 映射文件。
+     * 用法：java -jar xxx.jar i18n-extract <file.jobx|file.cxdx> [--out <map.json>]
+     */
+    private static int runI18nExtract(String[] args) {
+        if (args.length < 2 || args[1].isEmpty() || args[1].startsWith("--")) {
+            System.err.println("用法: java -jar <jar> i18n-extract <file.jobx|file.cxdx> [--out <map.json>]");
+            return 2;
+        }
+        File src = new File(args[1]);
+        if (!src.exists() || !src.isFile()) {
+            System.err.println("文件不存在: " + src.getAbsolutePath());
+            return 2;
+        }
+        File mapFile = null;
+        for (int i = 2; i < args.length; i++) {
+            String a = args[i];
+            if ("--out".equals(a) || "-o".equals(a)) {
+                if (i + 1 >= args.length) { System.err.println("--out 缺少参数"); return 2; }
+                mapFile = new File(args[++i]);
+            } else {
+                System.err.println("未知参数: " + a);
+                return 2;
+            }
+        }
+        if (mapFile == null) {
+            mapFile = new File(src.getParentFile(), stem(src.getName()) + ".i18n.json");
+        }
+        try {
+            System.out.println("抽取中文串: " + src.getAbsolutePath());
+            JobxI18n.ExtractStats st = JobxI18n.extract(src, mapFile);
+            System.out.println("✓ 单元格 " + st.cells + "（其中带训练状态 saved " + st.savedCells
+                    + " 个，将原样保留）；data/* 训练数据块 " + st.dataEntries + " 个（逐字节复制）");
+            System.out.println("✓ 待翻译唯一字符串 " + st.uniqueStrings + " 条");
+            System.out.println("✓ 映射文件: " + mapFile.getAbsolutePath());
+            System.out.println("  下一步：在该 JSON 的 strings[].en 填入英文译文后执行 i18n-apply");
+            return st.uniqueStrings == 0 ? 1 : 0;  // 没有中文串也算异常退出，便于脚本判断
+        } catch (Exception e) {
+            System.err.println("✗ 抽取失败: " + e.getMessage());
+            return 1;
+        }
+    }
+
+    /**
+     * CLI 子命令阶段 2：按映射把中文回写为英文 → 新 *_en_<时间戳>.jobx/.cxdx。
+     * 用法：java -jar xxx.jar i18n-apply <file> --map <map.json> [--out <dir>] [--name <base>] [--no-sig]
+     * 训练态 saved 字段与 data/* 训练块逐字节保留，重算 HMAC-SHA256 签名。
+     */
+    private static int runI18nApply(String[] args) {
+        if (args.length < 2 || args[1].isEmpty() || args[1].startsWith("--")) {
+            System.err.println("用法: java -jar <jar> i18n-apply <file.jobx|file.cxdx> --map <map.json> [--out <dir>] [--name <base>] [--no-sig]");
+            return 2;
+        }
+        File src = new File(args[1]);
+        if (!src.exists() || !src.isFile()) {
+            System.err.println("文件不存在: " + src.getAbsolutePath());
+            return 2;
+        }
+        File mapFile = null;
+        File outDir = null;
+        String baseName = null;
+        boolean noSig = false;
+        for (int i = 2; i < args.length; i++) {
+            String a = args[i];
+            if ("--map".equals(a) || "-m".equals(a)) {
+                if (i + 1 >= args.length) { System.err.println("--map 缺少参数"); return 2; }
+                mapFile = new File(args[++i]);
+            } else if ("--out".equals(a) || "-o".equals(a)) {
+                if (i + 1 >= args.length) { System.err.println("--out 缺少参数"); return 2; }
+                outDir = new File(args[++i]);
+            } else if ("--name".equals(a) || "-n".equals(a)) {
+                if (i + 1 >= args.length) { System.err.println("--name 缺少参数"); return 2; }
+                baseName = args[++i];
+            } else if ("--no-sig".equals(a)) {
+                noSig = true;
+            } else {
+                System.err.println("未知参数: " + a);
+                return 2;
+            }
+        }
+        if (mapFile == null || !mapFile.exists()) {
+            System.err.println("映射文件不存在（先用 i18n-extract 生成）: "
+                    + (mapFile == null ? "(未指定 --map)" : mapFile.getAbsolutePath()));
+            return 2;
+        }
+        try {
+            System.out.println("回写英文: " + src.getAbsolutePath());
+            JobxI18n.ApplyStats st = JobxI18n.apply(src, mapFile, outDir, baseName, noSig);
+            System.out.println("✓ 输出: " + st.outFile.getAbsolutePath());
+            System.out.println("✓ 映射条目 " + st.usedMapEntries
+                    + "；替换 name " + st.replacedNames + " / comment " + st.replacedComments
+                    + " / value " + st.replacedValues + " / 表达式字面量 " + st.replacedExprLiterals
+                    + " / Metadata " + st.replacedMetadata);
+            System.out.println("✓ 训练态保留：带 saved 单元格 " + st.savedCells + " 个；data/* 块 "
+                    + st.dataEntries + " 个逐字节复制；签名 " + (noSig ? "已跳过" : "已重算 (HMAC-SHA256)"));
+            if (!st.remainingCjk.isEmpty()) {
+                System.out.println("⚠ 仍有 " + st.remainingCjk.size()
+                        + " 处中文未翻译（en 留空或映射缺失），前若干条：");
+                for (String s : st.remainingCjk) {
+                    System.out.println("    - " + (s.length() > 60 ? s.substring(0, 60) + "…" : s));
+                }
+                return 1;
+            }
+            return 0;
+        } catch (Exception e) {
+            System.err.println("✗ 回写失败: " + e.getMessage());
+            return 1;
+        }
+    }
+
     private static void printHelp() {
         System.out.println("Cognex Jobx 工具箱 — 命令行用法");
         System.out.println();
@@ -453,6 +567,13 @@ public class Main {
         System.out.println("    --no-sig             不写 .sig 签名文件（默认写 HMAC-SHA256 签名）");
         System.out.println("    输出: {base}_yyyyMMdd_HHmmss.jobx/.cxdx/.xlsx，签名默认开启");
         System.out.println();
+        System.out.println("中译英（交付国外用户，两阶段；训练态 saved 与 data/* 原样保留并重算签名）：");
+        System.out.println("  阶段1 java -jar <jar> i18n-extract <file.jobx|file.cxdx> [--out <map.json>]");
+        System.out.println("         抽取 name/comment/value/表达式中文本 的中文串到 JSON（en 留空）");
+        System.out.println("  阶段2 人工或 LLM 在 JSON 中填好 strings[].en 后：");
+        System.out.println("         java -jar <jar> i18n-apply <file> --map <map.json> [--out <dir>] [--name <base>] [--no-sig]");
+        System.out.println("    输出: {stem}_en_yyyyMMdd_HHmmss.jobx/.cxdx（源文件同目录，默认带 HMAC 签名）");
+        System.out.println();
         System.out.println("其他：");
         System.out.println("  java -jar ... --help | -h       显示本帮助");
         System.out.println("  java -jar ... --version | -v    显示版本号");
@@ -466,6 +587,8 @@ public class Main {
         System.out.println("  java -jar jobx文件备份助手_20260928105112.jar export --all --out D:/exports");
         System.out.println("  java -jar jobx文件备份助手_20260928105112.jar generate presence.js --format all");
         System.out.println("  java -jar jobx文件备份助手_20260928105112.jar generate presence.js --format jobx --no-sig --name out");
+        System.out.println("  java -jar jobx文件备份助手_20260928105112.jar i18n-extract \"jobx/天窗程序模板.jobx\"");
+        System.out.println("  java -jar jobx文件备份助手_20260928105112.jar i18n-apply \"jobx/天窗程序模板.jobx\" --map \"jobx/天窗程序模板.i18n.json\"");
     }
 }
 
