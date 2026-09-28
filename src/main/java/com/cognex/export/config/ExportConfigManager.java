@@ -23,6 +23,12 @@ public class ExportConfigManager {
         load();
     }
 
+    /** CLI override: load from a specific config file path / CLI 覆盖：从指定路径加载配置 */
+    public ExportConfigManager(File configFile) {
+        this.configFile = configFile;
+        load();
+    }
+
     private File getConfigFile() {
         try {
             String jarPath = getClass().getProtectionDomain().getCodeSource().getLocation().toURI().getPath();

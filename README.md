@@ -114,6 +114,23 @@ java -jar jobx文件备份助手_<时间戳>.jar parse <file.jobx|file.cxdx> [--
 #       - 「位置布局-{sheetName}」sheet：按 A0~Z599 坐标还原；cell[5] saved 图像字节流嵌入对应单元格；
 #         cell[6] cellStyle 的 background-color / color 应用为单元格背景与文本颜色；名称/表达式入批注
 
+# 备份相机作业（FTP/FTPS 递归下载 .jobx + .jobx.sig；需先在 GUI 中维护 backup-config.json）
+java -jar jobx文件备份助手_<时间戳>.jar backup [--camera <name> | --all] [--config <file>] [--out <dir>]
+#   --camera <name>  仅备份指定相机（与 --all 互斥）
+#   --all            备份 backup-config.json 中全部相机（默认）
+#   --config <file>  覆盖 backup-config.json 路径（默认 jar 同目录）
+#   --out <dir>      覆盖备份根目录（默认按相机配置或 jar 目录下 backups/）
+#   输出: <备份根>/<相机名>/<yyyyMMddHHmmss>/
+
+# 导出相机作业到 xlsx（FTP 枚举 + CogSocket HMI 读单元格值/表达式；需先在 GUI 中维护 export-config.json）
+java -jar jobx文件备份助手_<时间戳>.jar export [--camera <name> | --all] [--config <file>] [--out <dir>] [--skip-expression]
+#   --camera <name>       仅导出指定相机（与 --all 互斥）
+#   --all                 导出 export-config.json 中全部相机（默认）
+#   --config <file>       覆盖 export-config.json 路径（默认 jar 同目录）
+#   --out <dir>           覆盖输出根目录（默认 jar 目录下 exports/<相机名>/<时间戳>/）
+#   --skip-expression     跳过表达式回读，加快速度
+#   输出: 每台相机每个作业一个 xlsx，含「单元格」+「位置布局」两个 sheet
+
 # 帮助与版本
 java -jar jobx文件备份助手_<时间戳>.jar --help | -h
 java -jar jobx文件备份助手_<时间戳>.jar --version | -v
@@ -132,11 +149,19 @@ java -jar jobx文件备份助手_20260928105112.jar parse "jobx/天窗程序模�
 Get-ChildItem -Include *.jobx,*.cxdx -Recurse | ForEach-Object {
     java -jar jobx文件备份助手_20260928105112.jar parse $_.FullName --out D:/exports
 }
+
+# 备份：指定单台相机 / 全部相机，并覆盖备份根目录
+java -jar jobx文件备份助手_20260928105112.jar backup --camera Line1
+java -jar jobx文件备份助手_20260928105112.jar backup --all --out D:/backups
+
+# 导出：指定单台相机并跳过表达式 / 全部相机输出到指定目录
+java -jar jobx文件备份助手_20260928105112.jar export --camera Line1 --skip-expression
+java -jar jobx文件备份助手_20260928105112.jar export --all --out D:/exports
 ```
 
-退出码：`0` 成功；`1` 解析失败；`2` 参数错误。
+退出码：`0` 成功；`1` 执行失败（解析失败 / 备份或导出至少一台失败 / 配置中没有相机）；`2` 参数错误。
 
-> 备份与导出功能因依赖相机连接（FTP/HMI 凭证与多相机配置），目前仅在 GUI 中提供；CLI 暂只覆盖离线解析。
+> 备份 / 导出 CLI 子命令需要先在 GUI 中维护 `backup-config.json` / `export-config.json`（相机 IP / 端口 / 凭证 / FTPS 等参数）。也可通过 `--config <file>` 指向不同的配置文件，以便维护多套配置档案（如生产 vs 测试）。端到端备份 / 导出需要实机相机连接。
 
 发布单文件 Windows exe（适合工控机分发）：
 
@@ -321,6 +346,23 @@ java -jar jobx文件备份助手_<timestamp>.jar parse <file.jobx|file.cxdx> [--
 #         stream embedded at the matching cell; cell[6] cellStyle background-color / color applied as
 #         cell background and text color; name / expression stored as cell comments
 
+# Back up camera jobs (FTP/FTPS recursive download of .jobx + .jobx.sig; maintain backup-config.json via GUI first)
+java -jar jobx文件备份助手_<timestamp>.jar backup [--camera <name> | --all] [--config <file>] [--out <dir>]
+#   --camera <name>  back up only the named camera (mutually exclusive with --all)
+#   --all            back up every camera in backup-config.json (default)
+#   --config <file>  override backup-config.json path (default: next to the jar)
+#   --out <dir>      override backup root directory (default: per-camera setting or `backups/` under the jar dir)
+#   Output: <backup-root>/<camera-name>/<yyyyMMddHHmmss>/
+
+# Export camera jobs to xlsx (FTP enumerate + CogSocket HMI reads cell values/expressions; maintain export-config.json via GUI first)
+java -jar jobx文件备份助手_<timestamp>.jar export [--camera <name> | --all] [--config <file>] [--out <dir>] [--skip-expression]
+#   --camera <name>       export only the named camera (mutually exclusive with --all)
+#   --all                 export every camera in export-config.json (default)
+#   --config <file>       override export-config.json path (default: next to the jar)
+#   --out <dir>           override output root (default: `exports/<camera-name>/<timestamp>/` under the jar dir)
+#   --skip-expression     skip expression read-back for speed
+#   Output: one xlsx per job, with `单元格` + `位置布局` sheets
+
 # Help and version
 java -jar jobx文件备份助手_<timestamp>.jar --help | -h
 java -jar jobx文件备份助手_<timestamp>.jar --version | -v
@@ -339,11 +381,19 @@ java -jar jobx文件备份助手_20260928105112.jar parse "jobx/天窗程序模�
 Get-ChildItem -Include *.jobx,*.cxdx -Recurse | ForEach-Object {
     java -jar jobx文件备份助手_20260928105112.jar parse $_.FullName --out D:/exports
 }
+
+# Backup: a single camera / all cameras, overriding the backup root
+java -jar jobx文件备份助手_20260928105112.jar backup --camera Line1
+java -jar jobx文件备份助手_20260928105112.jar backup --all --out D:/backups
+
+# Export: a single camera skipping expressions / all cameras to a specific directory
+java -jar jobx文件备份助手_20260928105112.jar export --camera Line1 --skip-expression
+java -jar jobx文件备份助手_20260928105112.jar export --all --out D:/exports
 ```
 
-Exit codes: `0` success; `1` parse failure; `2` argument error.
+Exit codes: `0` success; `1` execution failure (parse failure / one or more cameras failed backup or export / config has no cameras); `2` argument error.
 
-> Backup and Export depend on live camera connections (FTP / HMI credentials and multi-camera configs), so they are currently GUI-only; the CLI only covers offline parsing for now.
+> The backup / export CLI subcommands require `backup-config.json` / `export-config.json` (camera IP / port / credentials / FTPS settings) to be maintained via the GUI first. You can also point to a different config file with `--config <file>` to keep multiple profiles (e.g. production vs. test). End-to-end backup / export requires a live camera connection.
 
 Release a single-file Windows exe (for industrial-PC distribution):
 
