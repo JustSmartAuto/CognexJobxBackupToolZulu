@@ -255,6 +255,7 @@ A：不能。脚本只能使用标准 JS 内置对象与本文档列出的 `spre
 | `jobx.meta(obj)` | `obj`：含 `JobVersion` / `JobType` / `CameraType` / `FirmwareVersion` 任意子集 | `string` | 设置 Job 元数据（写入 Job.json Metadata） |
 | `jobx.sheetMeta(name, obj)` | `name`；`obj`：含 `timeout` / `coreThreshold` / `processingCores` / `outputs` / `columnWidths[]` / `rowHeights[]` 任意子集 | `string` | 设置 sheet 元数据 |
 | `jobx.load(file)` | `file`：`.jobx` / `.cxdx` 绝对路径 | `string`（如 `"loaded: 2 sheets, 406 cells from 天窗程序模板.jobx"`） | **从已有作业加载为模板**：清空当前模型并填入解析出的 sheet/cell；saved 字段被丢弃（恒 null） |
+| `jobx.loadImage(file, size)` | `file`：图片绝对路径（PNG/JPG/BMP/非动画 GIF）；`size`：输出边长像素数（1~1024），图片会缩放为 `size×size` | `number[][][]`：`pixels[y][x]=[r,g,b,a]`（各分量 0~255） | 由 Java ImageIO 侧解码图片（QuickJS 无文件系统/图像能力）；配合 `setCell` 的 `cellStyle` 可生成像素画 sheet（见 §9.6.5） |
 | `jobx.output(opts)` | `opts`：`{format, outDir, baseName, noSig}` 任意子集 | `string` | 显式设置输出参数；不调用则使用 CLI / GUI 默认值，format 默认 `"all"` |
 | `jobx.log(msg)` | `msg`：任意 | `null` | 等同 `console.log`，写标准输出 |
 
@@ -399,6 +400,34 @@ jobx.output({
 ```javascript
 // 仅做数学计算，验证 QuickJS 环境
 console.log(JSON.stringify({ pi: Math.PI, sum: [1, 2, 3].reduce((a, b) => a + b, 0) }));
+```
+
+#### 9.6.5 图片 → 像素画 cxdx（cellStyle 着色）
+
+把 PNG 采样为 N×N 单元格，每个像素一个单元格，颜色写入 cellStyle 的 `background-color`；列宽/行高设成相同像素值得到正方形网格。完整脚本见 [smoke-test/logo-pixel.js](smoke-test/logo-pixel.js)：
+
+```javascript
+var SIZE = 64;
+var pixels = jobx.loadImage("D:/path/to/logo.png", SIZE);  // pixels[y][x]=[r,g,b,a]
+jobx.sheet("Logo");
+jobx.sheetMeta("Logo", { columnWidths: new Array(SIZE).fill(20),
+                         rowHeights:   new Array(SIZE).fill(20) });
+for (var y = 0; y < SIZE; y++) {
+    for (var x = 0; x < SIZE; x++) {
+        var p = pixels[y][x];
+        if (p[3] < 16) continue;  // 全透明像素留空
+        var css = ".cell { background-color:rgba(" + p[0] + "," + p[1] + "," + p[2]
+                + "," + (Math.round(p[3] / 255 * 1000) / 1000) + "); }";
+        jobx.setCell(colName(x) + y, { expression: '""', cellStyle: css });
+    }
+}
+```
+
+CLI 生成（脚本不调用 `jobx.output`，输出参数全部走命令行）：
+
+```bash
+java -jar jobx文件备份助手_<时间戳>.jar generate logo-pixel.js --format cxdx --out out --name logo_64x64
+# -> out/logo_64x64_yyyyMMdd_HHmmss.cxdx（含 snippet.json.sig，range A1:BL64，4096 个带色单元格）
 ```
 
 ### 9.7 错误处理与 FAQ

@@ -4,6 +4,10 @@ import cn.net.zhijian.quickjs.JSArray;
 import cn.net.zhijian.quickjs.JSObject;
 import cn.net.zhijian.quickjs.QuickJSContext;
 
+import javax.imageio.ImageIO;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.util.Map;
 
@@ -19,6 +23,7 @@ import java.util.Map;
  *   jobx.meta(obj)                        设置 Job 元数据（JobVersion/JobType/CameraType/FirmwareVersion）
  *   jobx.sheetMeta(name, obj)             设置 sheet 元数据（timeout/coreThreshold/processingCores/outputs/columnWidths/rowHeights）
  *   jobx.load(file)                       从已有 .jobx/.cxdx 加载为模板
+ *   jobx.loadImage(file, size)            读取图片缩放为 size×size，返回二维像素数组 pixels[y][x]=[r,g,b,a]
  *   jobx.output({format,outDir,baseName,noSig})  显式设置输出参数；不调用则脚本结束自动输出 format="all"
  *   jobx.log(msg)                         等同 console.log
  *
@@ -65,6 +70,8 @@ public class GeneratorJsApi {
         api.setProperty("meta", (cn.net.zhijian.quickjs.JSCallFunction) args -> meta(args[0]));
         api.setProperty("sheetMeta", (cn.net.zhijian.quickjs.JSCallFunction) args -> sheetMeta(args[0], args[1]));
         api.setProperty("load", (cn.net.zhijian.quickjs.JSCallFunction) args -> load(args[0]));
+        api.setProperty("loadImage", (cn.net.zhijian.quickjs.JSCallFunction) args ->
+                args.length > 1 ? loadImage(args[0], args[1]) : loadImage(args[0], null));
         api.setProperty("output", (cn.net.zhijian.quickjs.JSCallFunction) args ->
                 args.length > 0 ? output(args[0]) : output(null));
         api.setProperty("log", (cn.net.zhijian.quickjs.JSCallFunction) args ->
@@ -250,6 +257,64 @@ public class GeneratorJsApi {
             return "loaded: " + job.sheets.size() + " sheets, " + cellCount + " cells from " + f.getName();
         } catch (Exception e) {
             throw new RuntimeException("load 失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 读取图片并缩放到 size×size，返回二维像素数组 pixels[y][x] = [r,g,b,a]（分量 0~255）。
+     * QuickJS 环境没有文件系统 / 图像解码能力，由 Java ImageIO 侧提供，便于脚本生成像素画。
+     *
+     * Load an image, scale to size×size and return a 2D pixel array; each pixel is [r,g,b,a] (0~255).
+     * QuickJS has no filesystem / image decoding, so this is provided on the Java (ImageIO) side —
+     * useful for generating pixel-art sheets (color cells via cellStyle background-color).
+     */
+    private Object loadImage(Object pathArg, Object sizeArg) {
+        String path = String.valueOf(pathArg);
+        File f = new File(path);
+        if (!f.exists() || !f.isFile()) {
+            throw new RuntimeException("图片不存在: " + path);
+        }
+        int size;
+        try {
+            size = (int) Math.round(Double.parseDouble(String.valueOf(sizeArg)));
+        } catch (Exception e) {
+            throw new RuntimeException("loadImage 第二参数 size 必须是数字（像素边长）");
+        }
+        if (size <= 0 || size > 1024) {
+            throw new RuntimeException("loadImage size 允许范围 1~1024，实际: " + size);
+        }
+        try {
+            BufferedImage src = ImageIO.read(f);
+            if (src == null) {
+                throw new RuntimeException("无法解码图片（支持 PNG/JPG/BMP/非动画 GIF）: " + f.getName());
+            }
+            // 统一绘到 ARGB 位图（保证带 alpha 的图片也能取到 a 分量）/ Paint onto ARGB so alpha is always available
+            BufferedImage scaled = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = scaled.createGraphics();
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g.drawImage(src, 0, 0, size, size, null);
+            g.dispose();
+
+            JSArray rows = ctx.createJSArray();
+            for (int y = 0; y < size; y++) {
+                JSArray row = ctx.createJSArray();
+                for (int x = 0; x < size; x++) {
+                    int argb = scaled.getRGB(x, y);
+                    JSArray px = ctx.createJSArray();
+                    px.set((argb >> 16) & 0xFF, 0);  // r
+                    px.set((argb >> 8) & 0xFF, 1);   // g
+                    px.set(argb & 0xFF, 2);          // b
+                    px.set((argb >>> 24) & 0xFF, 3);  // a
+                    row.set(px, x);
+                }
+                rows.set(row, y);
+            }
+            return rows;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("loadImage 失败: " + e.getMessage());
         }
     }
 
