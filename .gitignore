@@ -21,6 +21,7 @@ exports/
 
 # ---- Launcher 内嵌 JRE MSI（约 41MB）与 dotnet 构建产物 ----
 #      payload/ 与 bin/obj 均由 bundle-exe-with-timestamp.sh 重新生成
+/zulu*.msi
 launcher/*.msi
 launcher/Launcher/bin/
 launcher/Launcher/obj/
