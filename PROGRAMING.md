@@ -216,3 +216,210 @@ A：编辑器内容与「自动换行」开关随界面配置保存到 jar 所�
 
 **Q：能调用自定义 Java 类 / 导入库吗？**
 A：不能。脚本只能使用标准 JS 内置对象与本文档列出的 `spreadsheet`、`console`。
+
+---
+
+## 9. Jobx 生成器（不连相机，纯 JS → .jobx / .cxdx / .xlsx）
+
+第 5 个标签页「Jobx 生成器」用 JavaScript（QuickJS）+ 内置 `jobx` API 离线构建单元格 / sheet，运行（**F5**）后自动写出 .jobx / .cxdx / .xlsx 三类文件。**不需要连接相机**，便于 LLM 自动脚本编程。
+
+- 入口：主窗口 → **Jobx 生成器**标签页
+- 相关源码：[GeneratorTabPanel.java](src/main/java/com/cognex/generator/GeneratorTabPanel.java)、[GeneratorJsApi.java](src/main/java/com/cognex/generator/GeneratorJsApi.java)、[GeneratorScriptEngine.java](src/main/java/com/cognex/generator/GeneratorScriptEngine.java)、[JobxWriter.java](src/main/java/com/cognex/generator/JobxWriter.java)
+- 二进制格式：见 [JobxBinaryStructure.md](JobxBinaryStructure.md)
+
+### 9.1 运行环境要求
+
+| 项目 | 要求 |
+| --- | --- |
+| JDK / JRE | **JDK 19 或更高版本**（与编辑器一致，QuickJS 本地库内部用 `Thread.threadId()`） |
+| 相机连接 | **不需要** |
+| 输出目录 | GUI 默认 jar 目录下 `generated/`；CLI 默认脚本同目录 |
+
+> 低版本 JDK 下脚本功能给出友好错误「QuickJS 脚本引擎需要 JDK 19 或更高版本……」，**备份 / 导出 / 解析 / HMI 编辑等其他功能不受影响**。
+
+环境约束与编辑器相同（[§1](#1-运行环境要求)）：无 `window` / `document` / `fetch` / `setTimeout`；标准 `Math` / `JSON` / `Date` / `Array` / `console` 可用；同步执行。
+
+### 9.2 全局对象 `jobx`
+
+脚本环境自动注入全局对象 **`jobx`**，方法返回确认字符串或值对象。脚本结束若未显式调用 `jobx.output()`，自动按 `format="all"` 写出三种格式。
+
+#### 9.2.1 方法一览
+
+| 方法 | 参数 | 返回值 | 说明 |
+| --- | --- | --- | --- |
+| `jobx.sheet(name)` | `name`：sheet 名 | `string`（如 `"sheet: Inspection (cells=4)"`） | 切换当前 sheet；不存在则创建 |
+| `jobx.sheets()` | 无 | `string[]` | 所有 sheet 名数组 |
+| `jobx.setCell(loc, propsOrExpr)` | `loc`：单元格字符串（如 `"A0"`）；`propsOrExpr`：字符串=表达式，或对象（含 `expression` / `name` / `value` / `comment` / `cellStyle` / `graphicsStyle` / `condition` / `input` / `output` / `ipProtected` 任意子集） | `string`（如 `"set A0 @Inspection"`） | 写单元格；位置不存在则创建 |
+| `jobx.getCell(loc)` | `loc` | `object` / `null` | 返回 `{location, expression, value, name, comment, cellStyle}`；不存在返回 `null` |
+| `jobx.getCells()` | 无 | `object[]` | 当前 sheet 全部单元格对象数组 |
+| `jobx.meta(obj)` | `obj`：含 `JobVersion` / `JobType` / `CameraType` / `FirmwareVersion` 任意子集 | `string` | 设置 Job 元数据（写入 Job.json Metadata） |
+| `jobx.sheetMeta(name, obj)` | `name`；`obj`：含 `timeout` / `coreThreshold` / `processingCores` / `outputs` / `columnWidths[]` / `rowHeights[]` 任意子集 | `string` | 设置 sheet 元数据 |
+| `jobx.load(file)` | `file`：`.jobx` / `.cxdx` 绝对路径 | `string`（如 `"loaded: 2 sheets, 406 cells from 天窗程序模板.jobx"`） | **从已有作业加载为模板**：清空当前模型并填入解析出的 sheet/cell；saved 字段被丢弃（恒 null） |
+| `jobx.output(opts)` | `opts`：`{format, outDir, baseName, noSig}` 任意子集 | `string` | 显式设置输出参数；不调用则使用 CLI / GUI 默认值，format 默认 `"all"` |
+| `jobx.log(msg)` | `msg`：任意 | `null` | 等同 `console.log`，写标准输出 |
+
+#### 9.2.2 单元格 12 元素语义
+
+`setCell` 写入的 cell 在 Job.json 中按官方 12 元素数组顺序存储（详见 [JobxBinaryStructure.md §6.4](JobxBinaryStructure.md)）：
+
+| 索引 | 字段 | `setCell` props key | 默认值 |
+| --- | --- | --- | --- |
+| 0 | location | （由 `loc` 第一参数填入） | 必填 |
+| 1 | expression | `expression` | `""` |
+| 2 | condition | `condition` | `"1"`（正常） |
+| 3 | value | `value` | `null`（运行时由相机填） |
+| 4 | name | `name` | `""` |
+| 5 | saved | （**恒为 null，不可设置**） | `null` |
+| 6 | cellStyle | `cellStyle` | `""` |
+| 7 | graphicsStyle | `graphicsStyle` | `""` |
+| 8 | comment | `comment` | `""` |
+| 9 | input | `input` | `0` |
+| 10 | output | `output` | `0` |
+| 11 | ipProtected | `ipProtected` | `0` |
+
+`cellStyle` 格式（IsvsCellStyleSerializer）：多个 CSS 块以空格分隔，每块形如 `.cell { background-color:rgba(0,128,0,1.0); color:rgba(255,255,255,1.0); }`。POI 颜色无 alpha 通道，导出 xlsx 时 A 被忽略。
+
+### 9.3 已知问题：训练型工具的 saved 字段
+
+`PatMax` / `Caliper` / `CalibrateGrid` 等**需要训练状态**的视觉工具，其训练态以 `data/<sha256>` 对象形式存储在 .jobx 中，由 cell[5] `saved` 字段以 `{"$type":"FileRef","id":"data/<hash>"}` 引用（详见 [§5](JobxBinaryStructure.md)）。
+
+本生成器**不连相机、无法在相机侧运行训练**，因此：
+- ✅ 表达式可正常写入：`jobx.setCell("D0", "PatMax(A0, \"model1\")")`
+- ❌ `saved` 字段**恒为 null**（用户要求，无法设置）
+- ⚠️ 装入相机后，这些 cell 可能无法直接运行，需在 In-Sight Explorer 中**重新执行训练**才能正常工作
+
+非训练型工具（`AcquireImage` / `Presence` / `IF` / `Count` 等纯函数型）不受此限制，生成的 .jobx 装入相机即可运行。
+
+### 9.4 输出文件名规则
+
+与解析器导出 xlsx 一致（[ParserXlsxExporter.java:188](src/main/java/com/cognex/parser/ParserXlsxExporter.java#L188)）：
+
+```
+{baseName}_yyyyMMdd_HHmmss.{ext}
+```
+
+- `baseName` 默认：CLI = 脚本 stem；GUI = `"generated"`
+- `outDir` 默认：CLI = 脚本父目录；GUI = jar 目录下 `generated/`
+- `format` 取值：`jobx` | `cxdx` | `xlsx` | `all`（默认 `all`）
+- `noSig` 默认 `false`（**默认写 `.sig`** HMAC-SHA256 签名；`true` 跳过）
+
+签名算法（详见 [§8](JobxBinaryStructure.md)）：HMAC-SHA256，base64 key `DtrDN+DqE5lDTNNWDl1tkYI92hmjAW2g8Rc+xmn9P04=`；.jobx 签名明文 Job.json 字节，.cxdx 签名 snippet.json 密文（XOR 后）字节。
+
+### 9.5 CLI 用法
+
+```
+java -jar jobx文件备份助手_<时间戳>.jar generate <script.js> [--out <dir>] [--format <fmt>] [--name <base>] [--no-sig]
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `<script.js>` | 生成器 JS 脚本路径 |
+| `--out <dir>` / `-o` | 输出目录（默认脚本同目录） |
+| `--format <fmt>` / `-f` | 输出格式：`jobx` / `cxdx` / `xlsx` / `all`（默认 `all`） |
+| `--name <base>` / `-n` | 输出文件名前缀（默认脚本 stem） |
+| `--no-sig` | 不写 .sig 签名文件（默认写 HMAC-SHA256 签名） |
+
+CLI 参数仅作为**默认值**：脚本中若调用 `jobx.output({...})` 则覆盖 CLI 参数；不调用则使用 CLI 参数。
+
+退出码：0=成功；1=脚本或文件生成失败（多格式时部分失败也返回 1，但成功部分仍写出）；2=参数错误。
+
+### 9.6 示例
+
+#### 9.6.1 存在检测（最小可运行示例）
+
+```javascript
+// presence.js — Jobx 生成器示例：存在检测 / Presence Detection
+jobx.sheet("Inspection");
+jobx.setCell("A0", "AcquireImage()");
+jobx.setCell("B0", "Presence(A0, 0.5)");
+jobx.setCell("C0", "IF(B0>0,\"OK\",\"NG\")");
+
+// 带名称/批注/样式写单元格
+jobx.setCell("C0", {
+  expression: "IF(B0>0,\"OK\",\"NG\")",
+  name: "Result",
+  comment: "Pass when presence > 0",
+  cellStyle: ".cell { background-color:rgba(0,128,0,1.0); color:rgba(255,255,255,1.0); }"
+});
+
+jobx.meta({ JobVersion: "22.2", JobType: "Spreadsheet" });
+```
+
+CLI 运行：
+
+```
+java -jar jobx文件备份助手_<时间戳>.jar generate presence.js --format all
+# 输出：
+#   presence_<ts>.jobx（默认含 .sig 签名）
+#   presence_<ts>.cxdx
+#   presence_<ts>.xlsx
+```
+
+#### 9.6.2 从已有 .jobx 加载为模板
+
+在已有作业基础上修改部分单元格（保留原 sheet 名、表达式、样式）：
+
+```javascript
+// modify-template.js — 加载相机导出的 .jobx 模板，修改阈值后重新生成
+jobx.load("D:/templates/天窗程序模板.jobx");
+console.log("加载完成: " + jobx.sheets().join(", "));
+
+jobx.sheet("Inspection");
+// 把 B0 阈值从 0.5 改为 0.8
+let old = jobx.getCell("B0");
+console.log("原 B0 表达式: " + old.expression);
+jobx.setCell("B0", "Presence(A0, 0.8)");
+
+// 仅输出 .jobx，便于直接装回相机
+jobx.output({ format: "jobx", baseName: "天窗程序模板_阈值0.8" });
+```
+
+> **注意**：`load` 加载的作业若含 `PatMax` / `Caliper` 等训练型 cell，它们的 `saved` 字段会被丢弃；重新装入相机后这些工具需重新训练。
+
+#### 9.6.3 自定义输出参数
+
+```javascript
+// custom-output.js — 显式指定输出目录 / 文件名 / 不写签名
+jobx.sheet("Inspection");
+jobx.setCell("A0", "AcquireImage()");
+jobx.setCell("B0", "Count(A0, 100, 0, 0)");
+
+jobx.output({
+  format: "all",          // jobx | cxdx | xlsx | all
+  outDir: "D:/generated", // 自定义目录
+  baseName: "count_demo", // 自定义文件名前缀
+  noSig: false             // true=不写 .sig
+});
+```
+
+#### 9.6.4 纯 JavaScript 试验（与编辑器 §7.6 一致）
+
+不调用 `jobx.*` 时不会写出任何文件：
+
+```javascript
+// 仅做数学计算，验证 QuickJS 环境
+console.log(JSON.stringify({ pi: Math.PI, sum: [1, 2, 3].reduce((a, b) => a + b, 0) }));
+```
+
+### 9.7 错误处理与 FAQ
+
+**Q：运行时报「QuickJS 脚本引擎需要 JDK 19 或更高版本」？**
+A：用 JDK 19+（本机可用 JDK 25）运行 jar；其他功能在 JDK 8+ 仍可用。
+
+**Q：生成的 .jobx 装入相机后 `PatMax` / `Caliper` 报「未训练」？**
+A：已知问题，详见 [§9.3](#93-已知问题训练型工具的-saved-字段)。本工具无法离线生成训练态；需在相机侧 In-Sight Explorer 重新训练这些 cell。
+
+**Q：`jobx.load()` 加载后 saved 字段丢失？**
+A：同上，`saved` 恒为 null。装入相机后训练型工具需重训。
+
+**Q：CLI 的 `--format` 与脚本 `jobx.output({format:...})` 冲突？**
+A：脚本调用 `jobx.output()` 时以脚本设置为准；不调用时使用 CLI 参数（默认 `all`）。
+
+**Q：输出文件名规则？**
+A：`{base}_yyyyMMdd_HHmmss.{ext}`，与解析器导出 xlsx 一致。`base` 默认脚本 stem（CLI）或 `"generated"`（GUI）。
+
+**Q：脚本会保存吗？**
+A：GUI 编辑器内容自动保存到 jar 目录下 `generator-script.js`（明文，无相机信息）。CLI 不保存脚本，仅执行。
+
+**Q：能调用自定义 Java 类 / 导入库吗？**
+A：不能。脚本只能使用标准 JS 内置对象与本文档列出的 `jobx`、`console`。

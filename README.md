@@ -57,6 +57,16 @@
   - **`位置布局-{sheetName}`**：按 A0~Z599 坐标还原至 Excel 单元格；`cell[5] saved` 字节流若为图像（PNG/JPEG/BMP/WMF）则嵌入对应单元格；`cell[6] cellStyle` 中的 `background-color`/`color`（`rgba(R,G,B,A)` 格式，alpha 忽略）应用为单元格背景与文本颜色；名称/表达式入批注
 - 多 sheet 时每个源 sheet 单独一个 `位置布局-{sheetName}` sheet（避免同位置 comment 冲突）
 
+**⑤ Jobx 生成器**（离线，不连相机）
+
+- 通过 **JavaScript（QuickJS）** + 内置 `jobx` API 离线构建单元格 / sheet，运行（**F5**）后自动写出 `.jobx` / `.cxdx` / `.xlsx` 三类文件，**便于 LLM 自动脚本编程**
+- `jobx.sheet(name)` 切换/创建 sheet；`jobx.setCell(loc, propsOrExpr)` 写单元格（2-arg 字符串=表达式，对象=字段集合）；`jobx.meta(...)` 设置 Job 元数据；`jobx.sheetMeta(...)` 设置 sheet 元数据
+- **`jobx.load(file)`** 从已有 `.jobx` / `.cxdx` 加载为模板，在已有 cell 基础上修改后重新生成
+- 输出文件名规则 `{base}_yyyyMMdd_HHmmss.{ext}`（与解析器一致）；默认输出目录 GUI = jar 目录下 `generated/`，CLI = 脚本同目录
+- 默认写 `.sig` HMAC-SHA256 签名（密钥来自 Cognex 反编译，详见 [JobxBinaryStructure.md §8](JobxBinaryStructure.md)）；可 `--no-sig` 跳过
+- **已知问题**：`PatMax` / `Caliper` 等训练型工具表达式可写，但 `saved` 字段恒 null（无法离线生成训练态），装入相机后需重新训练
+- 完整 API 表、CLI 参数与示例见 [PROGRAMING.md §9](PROGRAMING.md)
+
 **通用**
 
 - 纯 Java Swing 单 fat jar，备份 / 导出 / HMI 编辑功能 **JRE 8+** 即可运行
@@ -131,6 +141,15 @@ java -jar jobx文件备份助手_<时间戳>.jar export [--camera <name> | --all
 #   --skip-expression     跳过表达式回读，加快速度
 #   输出: 每台相机每个作业一个 xlsx，含「单元格」+「位置布局」两个 sheet
 
+# 生成器：JavaScript 脚本 → .jobx / .cxdx / .xlsx（不连相机，便于 LLM 自动脚本编程）
+java -jar jobx文件备份助手_<时间戳>.jar generate <script.js> [--out <dir>] [--format <fmt>] [--name <base>] [--no-sig]
+#   <script.js>          生成器 JS 脚本路径（jobx.* API 构建单元格/sheet，详见 PROGRAMING.md §9）
+#   --out <dir>          输出目录（默认脚本同目录）
+#   --format <fmt>      输出格式：jobx | cxdx | xlsx | all（默认 all）
+#   --name <base>       输出文件名前缀（默认脚本 stem，规则 {base}_yyyyMMdd_HHmmss.<ext>）
+#   --no-sig             不写 .sig 签名文件（默认写 HMAC-SHA256 签名）
+#   输出: {base}_yyyyMMdd_HHmmss.jobx/.cxdx/.xlsx，签名默认开启
+
 # 帮助与版本
 java -jar jobx文件备份助手_<时间戳>.jar --help | -h
 java -jar jobx文件备份助手_<时间戳>.jar --version | -v
@@ -157,11 +176,15 @@ java -jar jobx文件备份助手_20260928105112.jar backup --all --out D:/backup
 # 导出：指定单台相机并跳过表达式 / 全部相机输出到指定目录
 java -jar jobx文件备份助手_20260928105112.jar export --camera Line1 --skip-expression
 java -jar jobx文件备份助手_20260928105112.jar export --all --out D:/exports
+
+# 生成器：执行 JS 脚本生成三种格式 / 仅生成 .jobx 且不写签名
+java -jar jobx文件备份助手_20260928105112.jar generate presence.js --format all
+java -jar jobx文件备份助手_20260928105112.jar generate presence.js --format jobx --no-sig --name out
 ```
 
-退出码：`0` 成功；`1` 执行失败（解析失败 / 备份或导出至少一台失败 / 配置中没有相机）；`2` 参数错误。
+退出码：`0` 成功；`1` 执行失败（解析失败 / 备份或导出至少一台失败 / 配置中没有相机 / 生成器脚本或文件生成失败）；`2` 参数错误。
 
-> 备份 / 导出 CLI 子命令需要先在 GUI 中维护 `backup-config.json` / `export-config.json`（相机 IP / 端口 / 凭证 / FTPS 等参数）。也可通过 `--config <file>` 指向不同的配置文件，以便维护多套配置档案（如生产 vs 测试）。端到端备份 / 导出需要实机相机连接。
+> 备份 / 导出 CLI 子命令需要先在 GUI 中维护 `backup-config.json` / `export-config.json`（相机 IP / 端口 / 凭证 / FTPS 等参数）。也可通过 `--config <file>` 指向不同的配置文件，以便维护多套配置档案（如生产 vs 测试）。端到端备份 / 导出需要实机相机连接。生成器 CLI 不需要任何配置文件，纯离线运行；脚本中调用 `jobx.output({...})` 会覆盖 CLI 参数。
 
 发布单文件 Windows exe（适合工控机分发）：
 
@@ -243,12 +266,13 @@ src/main/java/com/cognex/
 
 ## English
 
-A Java Swing all-in-one tool for Cognex vision camera jobs (`.jobx`). The main window has four tabs:
+A Java Swing all-in-one tool for Cognex vision camera jobs (`.jobx`). The main window has five tabs:
 
 1. **Jobx Backup**: recursively downloads `.jobx` and `.jobx.sig` files from cameras via FTP/FTPS, archiving them under `backup-dir/CameraName/yyyyMMddHHmmss/` timestamp folders;
 2. **Jobx Export**: enumerates all jobs on the camera over FTP/FTPS, loads each one through the CogSocket HMI and reads every spreadsheet cell's **value and expression**, producing a print-friendly A4 xlsx workbook per job;
 3. **Jobx Editor**: a CogSocket HMI client with live image display, spreadsheet cell viewing/editing, manual trigger, online/offline and live-mode switching, camera info, XML export, and a built-in QuickJS JavaScript script editor;
-4. **Jobx Parser**: offline local parser for `.jobx` / `.cxdx` files (TAR + 4-byte cyclic XOR deobfuscation, no camera connection); extracts all sheet cells and exports `{stem}_yyyyMMdd_HHmmss.xlsx` to the source file's directory. Two-sheet output: `单元格` (location/name/value/expression/comment, sorted by location) + `位置布局-{sheetName}` (restores A0~Z599 coordinates; cell[5] `saved` byte stream embedded as a picture if it is a valid image; cell[6] `cellStyle`'s `background-color`/`color` (in `rgba(R,G,B,A)` form, alpha dropped) applied as cell background and text color; name/expression put into cell comments).
+4. **Jobx Parser**: offline local parser for `.jobx` / `.cxdx` files (TAR + 4-byte cyclic XOR deobfuscation, no camera connection); extracts all sheet cells and exports `{stem}_yyyyMMdd_HHmmss.xlsx` to the source file's directory. Two-sheet output: `单元格` (location/name/value/expression/comment, sorted by location) + `位置布局-{sheetName}` (restores A0~Z599 coordinates; cell[5] `saved` byte stream embedded as a picture if it is a valid image; cell[6] `cellStyle`'s `background-color`/`color` (in `rgba(R,G,B,A)` form, alpha dropped) applied as cell background and text color; name/expression put into cell comments);
+5. **Jobx Generator**: builds cells / sheets offline via **JavaScript (QuickJS)** + the built-in `jobx` API and writes `.jobx` / `.cxdx` / `.xlsx` after running (**F5**) — **no camera connection**, convenient for LLM-driven automated script programming.
 
 ### Features
 
@@ -287,6 +311,16 @@ A Java Swing all-in-one tool for Cognex vision camera jobs (`.jobx`). The main w
   - **`单元格`** ("Cells"): columns location / name / value / expression / comment, sorted by location (A0,B0,...,A1,...)
   - **`位置布局-{sheetName}`** ("Layout"): restores cells by A0~Z599 coordinates; `cell[5] saved` byte stream embedded as a picture at the cell anchor if it is a valid image (PNG/JPEG/BMP/WMF); `cell[6] cellStyle`'s `background-color` / `color` (in `rgba(R,G,B,A)` form, alpha dropped) applied as cell background and text color; name/expression stored as cell comments
 - With multiple source sheets, one `位置布局-{sheetName}` sheet is created per source sheet (avoids comment collisions on shared coordinates)
+
+**⑤ Jobx Generator** (offline, no camera connection)
+
+- Build cells / sheets offline via **JavaScript (QuickJS)** + the built-in `jobx` API; on run (**F5**) the generator automatically writes `.jobx` / `.cxdx` / `.xlsx` — **convenient for LLM-driven automated script programming**
+- `jobx.sheet(name)` switches/creates a sheet; `jobx.setCell(loc, propsOrExpr)` writes a cell (a 2-arg string = expression, an object = field set); `jobx.meta(...)` sets Job metadata; `jobx.sheetMeta(...)` sets sheet metadata
+- **`jobx.load(file)`** loads an existing `.jobx` / `.cxdx` as a template — modify existing cells then regenerate
+- Output filename rule `{base}_yyyyMMdd_HHmmss.{ext}` (same as the parser); default output dir is `generated/` under the jar dir in GUI mode, or next to the script in CLI mode
+- A `.sig` HMAC-SHA256 signature file is written by default (the key is the Cognex hardcoded `DeobfuscateBytes` constant — see [JobxBinaryStructure.md §8](JobxBinaryStructure.md)); pass `--no-sig` to skip
+- **Known issue**: expressions referencing training-based tools such as `PatMax` / `Caliper` can be written, but the `saved` field is always `null` (training state cannot be produced offline) — after loading the generated job into a camera you must retrain those tools
+- Full API table, CLI parameters, and examples: see [PROGRAMING.md §9](PROGRAMING.md)
 
 **General**
 
@@ -363,6 +397,15 @@ java -jar jobx文件备份助手_<timestamp>.jar export [--camera <name> | --all
 #   --skip-expression     skip expression read-back for speed
 #   Output: one xlsx per job, with `单元格` + `位置布局` sheets
 
+# Generator: JavaScript script -> .jobx / .cxdx / .xlsx (no camera connection, for LLM-driven automated script programming)
+java -jar jobx文件备份助手_<timestamp>.jar generate <script.js> [--out <dir>] [--format <fmt>] [--name <base>] [--no-sig]
+#   <script.js>          generator JS script path (uses jobx.* API to build cells/sheets, see PROGRAMING.md §9)
+#   --out <dir>          output directory (default: next to the script)
+#   --format <fmt>       output format: jobx | cxdx | xlsx | all (default all)
+#   --name <base>        output filename prefix (default: script stem; rule {base}_yyyyMMdd_HHmmss.<ext>)
+#   --no-sig             skip writing the .sig signature file (HMAC-SHA256 signature is written by default)
+#   Output: {base}_yyyyMMdd_HHmmss.jobx/.cxdx/.xlsx; signature on by default
+
 # Help and version
 java -jar jobx文件备份助手_<timestamp>.jar --help | -h
 java -jar jobx文件备份助手_<timestamp>.jar --version | -v
@@ -389,11 +432,15 @@ java -jar jobx文件备份助手_20260928105112.jar backup --all --out D:/backup
 # Export: a single camera skipping expressions / all cameras to a specific directory
 java -jar jobx文件备份助手_20260928105112.jar export --camera Line1 --skip-expression
 java -jar jobx文件备份助手_20260928105112.jar export --all --out D:/exports
+
+# Generator: run a JS script producing all three formats / only .jobx and skip the signature
+java -jar jobx文件备份助手_20260928105112.jar generate presence.js --format all
+java -jar jobx文件备份助手_20260928105112.jar generate presence.js --format jobx --no-sig --name out
 ```
 
-Exit codes: `0` success; `1` execution failure (parse failure / one or more cameras failed backup or export / config has no cameras); `2` argument error.
+Exit codes: `0` success; `1` execution failure (parse failure / one or more cameras failed backup or export / config has no cameras / generator script or file generation failed); `2` argument error.
 
-> The backup / export CLI subcommands require `backup-config.json` / `export-config.json` (camera IP / port / credentials / FTPS settings) to be maintained via the GUI first. You can also point to a different config file with `--config <file>` to keep multiple profiles (e.g. production vs. test). End-to-end backup / export requires a live camera connection.
+> The backup / export CLI subcommands require `backup-config.json` / `export-config.json` (camera IP / port / credentials / FTPS settings) to be maintained via the GUI first. You can also point to a different config file with `--config <file>` to keep multiple profiles (e.g. production vs. test). End-to-end backup / export requires a live camera connection. The generator CLI needs no config file and runs fully offline; calling `jobx.output({...})` inside the script overrides the CLI parameters.
 
 Release a single-file Windows exe (for industrial-PC distribution):
 

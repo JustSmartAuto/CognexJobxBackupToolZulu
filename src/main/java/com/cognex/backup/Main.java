@@ -7,6 +7,10 @@ import com.cognex.backup.ui.MainFrame;
 import com.cognex.export.ExportTask;
 import com.cognex.export.config.ExportConfigManager;
 import com.cognex.export.model.ExportCamera;
+import com.cognex.generator.Generator;
+import com.cognex.generator.GeneratorJsApi;
+import com.cognex.generator.GeneratorScriptEngine;
+import com.cognex.generator.GeneratorJob;
 import com.cognex.parser.JobxParser;
 import com.cognex.parser.ParserXlsxExporter;
 import com.formdev.flatlaf.FlatLightLaf;
@@ -30,6 +34,9 @@ public class Main {
                 System.exit(code);
             } else if ("export".equals(cmd) || "e".equals(cmd)) {
                 int code = runExport(args);
+                System.exit(code);
+            } else if ("generate".equals(cmd) || "g".equals(cmd)) {
+                int code = runGenerate(args);
                 System.exit(code);
             } else if ("--help".equals(cmd) || "-h".equals(cmd) || "help".equals(cmd)) {
                 printHelp();
@@ -312,6 +319,102 @@ public class Main {
         return failed == 0 ? 0 : 1;
     }
 
+    /**
+     * CLI 子命令：执行 JavaScript 脚本，生成 .jobx / .cxdx / .xlsx（不连相机）。
+     * CLI subcommand: run a JavaScript script to generate .jobx / .cxdx / .xlsx (no camera).
+     *
+     * 用法: java -jar xxx.jar generate <script.js> [--out <dir>] [--format jobx|cxdx|xlsx|all] [--name <base>] [--no-sig]
+     * Usage: java -jar xxx.jar generate <script.js> [--out <dir>] [--format jobx|cxdx|xlsx|all] [--name <base>] [--no-sig]
+     */
+    private static int runGenerate(String[] args) {
+        if (args.length < 2 || args[1].isEmpty() || args[1].startsWith("--")) {
+            System.err.println("用法: java -jar <jar> generate <script.js> [--out <dir>] [--format <fmt>] [--name <base>] [--no-sig]");
+            System.err.println("详见 --help");
+            return 2;
+        }
+        File script = new File(args[1]);
+        if (!script.exists() || !script.isFile()) {
+            System.err.println("脚本不存在: " + script.getAbsolutePath());
+            return 2;
+        }
+        File outDir = null;
+        String format = "all";
+        String baseName = null;
+        boolean noSig = false;
+        for (int i = 2; i < args.length; i++) {
+            String a = args[i];
+            if ("--out".equals(a) || "-o".equals(a)) {
+                if (i + 1 >= args.length) { System.err.println("--out 缺少参数"); return 2; }
+                outDir = new File(args[++i]);
+            } else if ("--format".equals(a) || "-f".equals(a)) {
+                if (i + 1 >= args.length) { System.err.println("--format 缺少参数"); return 2; }
+                format = args[++i];
+                if (!format.equals("jobx") && !format.equals("cxdx") && !format.equals("xlsx") && !format.equals("all")) {
+                    System.err.println("--format 仅支持 jobx | cxdx | xlsx | all");
+                    return 2;
+                }
+            } else if ("--name".equals(a) || "-n".equals(a)) {
+                if (i + 1 >= args.length) { System.err.println("--name 缺少参数"); return 2; }
+                baseName = args[++i];
+            } else if ("--no-sig".equals(a)) {
+                noSig = true;
+            } else if ("--help".equals(a) || "-h".equals(a)) {
+                System.out.println("用法: java -jar <jar> generate <script.js> [--out <dir>] [--format <fmt>] [--name <base>] [--no-sig]");
+                System.out.println("  <script.js>           生成器 JS 脚本路径（jobx.* API 构建单元格/sheet）");
+                System.out.println("  --out <dir>           输出目录（默认脚本同目录）");
+                System.out.println("  --format <fmt>       输出格式：jobx | cxdx | xlsx | all（默认 all）");
+                System.out.println("  --name <base>        输出文件名前缀（默认脚本 stem，规则 {base}_yyyyMMdd_HHmmss.<ext>）");
+                System.out.println("  --no-sig              不写 .sig 签名文件（默认写 HMAC-SHA256 签名）");
+                return 0;
+            } else {
+                System.err.println("未知参数: " + a);
+                return 2;
+            }
+        }
+
+        String scriptText;
+        try {
+            scriptText = new String(java.nio.file.Files.readAllBytes(script.toPath()), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            System.err.println("读取脚本失败: " + e.getMessage());
+            return 2;
+        }
+        // 默认输出目录 = 脚本父目录；默认 baseName = 脚本 stem
+        File defaultOutDir = outDir != null ? outDir : (script.getParentFile() != null ? script.getParentFile() : new File("."));
+        String defaultBaseName = baseName != null ? baseName : stem(script.getName());
+
+        java.util.function.Consumer<String> logger = msg -> System.out.println("  " + msg);
+        long t0 = System.currentTimeMillis();
+        GeneratorScriptEngine engine = new GeneratorScriptEngine(defaultOutDir, defaultBaseName, logger);
+        // CLI 设置默认 format/noSig；脚本若调用 jobx.output() 则覆盖
+        engine.setDefaultFormat(format, noSig);
+        try {
+            System.out.println("执行脚本: " + script.getAbsolutePath());
+            GeneratorScriptEngine.ScriptResult r = engine.execute(scriptText);
+            if (!r.output.isEmpty()) {
+                System.out.println("---- 脚本输出 ----");
+                System.out.print(r.output.endsWith("\n") ? r.output : r.output + "\n");
+            }
+            if (r.success) {
+                System.out.println("✓ " + r.message);
+                long ms = System.currentTimeMillis() - t0;
+                System.out.println("用时 " + ms + " ms");
+                return 0;
+            } else {
+                System.err.println("✗ " + r.message);
+                return 1;
+            }
+        } catch (Throwable t) {
+            System.err.println("✗ 异常: " + t.getClass().getSimpleName() + ": " + t.getMessage());
+            return 1;
+        }
+    }
+
+    private static String stem(String name) {
+        int dot = name.lastIndexOf('.');
+        return dot > 0 ? name.substring(0, dot) : name;
+    }
+
     private static void printHelp() {
         System.out.println("Cognex Jobx 工具箱 — 命令行用法");
         System.out.println();
@@ -341,6 +444,15 @@ public class Main {
         System.out.println("    --skip-expression     跳过表达式回读，加快速度");
         System.out.println("    输出: 每台相机每个作业一个 xlsx，含「单元格」+「位置布局」两个 sheet");
         System.out.println();
+        System.out.println("生成器：JavaScript 脚本 → .jobx / .cxdx / .xlsx（不连相机，便于 LLM 自动脚本编程）：");
+        System.out.println("  java -jar jobx文件备份助手_<时间戳>.jar generate <script.js> [--out <dir>] [--format <fmt>] [--name <base>] [--no-sig]");
+        System.out.println("    <script.js>          生成器 JS 脚本路径（jobx.* API 构建单元格/sheet，详见 PROGRAMING.md §9）");
+        System.out.println("    --out <dir>          输出目录（默认脚本同目录）");
+        System.out.println("    --format <fmt>      输出格式：jobx | cxdx | xlsx | all（默认 all）");
+        System.out.println("    --name <base>       输出文件名前缀（默认脚本 stem，规则 {base}_yyyyMMdd_HHmmss.<ext>）");
+        System.out.println("    --no-sig             不写 .sig 签名文件（默认写 HMAC-SHA256 签名）");
+        System.out.println("    输出: {base}_yyyyMMdd_HHmmss.jobx/.cxdx/.xlsx，签名默认开启");
+        System.out.println();
         System.out.println("其他：");
         System.out.println("  java -jar ... --help | -h       显示本帮助");
         System.out.println("  java -jar ... --version | -v    显示版本号");
@@ -352,6 +464,8 @@ public class Main {
         System.out.println("  java -jar jobx文件备份助手_20260928105112.jar backup --all --out D:/backups");
         System.out.println("  java -jar jobx文件备份助手_20260928105112.jar export --camera Line1 --skip-expression");
         System.out.println("  java -jar jobx文件备份助手_20260928105112.jar export --all --out D:/exports");
+        System.out.println("  java -jar jobx文件备份助手_20260928105112.jar generate presence.js --format all");
+        System.out.println("  java -jar jobx文件备份助手_20260928105112.jar generate presence.js --format jobx --no-sig --name out");
     }
 }
 

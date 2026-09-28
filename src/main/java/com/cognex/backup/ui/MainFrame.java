@@ -1,6 +1,7 @@
 package com.cognex.backup.ui;
 
 import com.cognex.export.ExportTabPanel;
+import com.cognex.generator.GeneratorTabPanel;
 import com.cognex.insight.ui.panel.EditorTabPanel;
 import com.cognex.parser.ParserTabPanel;
 import com.cognex.backup.util.AppIcons;
@@ -11,18 +12,20 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 
 /**
- * 主窗口：JTabbedPane 承载四个工具标签页。
+ * 主窗口：JTabbedPane 承载五个工具标签页。
  * 1. Jobx 备份工具（原备份功能）
  * 2. Jobx 导出工具（移植自 Go 版导出工具：FTP 枚举 + CogSocket 读单元格 + xlsx）
  * 3. Jobx 编辑器（移植自 java-insight-hmi：实时图像/表格编辑/QuickJS 脚本）
  * 4. Jobx 解析器（离线解析 .jobx/.cxdx → 同目录带时间戳的 xlsx，无需连接相机）
+ * 5. Jobx 生成器（JS 脚本编写视觉逻辑 → 生成 .jobx/.cxdx/.xlsx，无需连接相机）
  */
 public class MainFrame extends JFrame {
 
     private EditorTabPanel editorTab;
+    private GeneratorTabPanel generatorTab;
 
     public MainFrame() {
-        setTitle("Cognex Jobx 工具箱 - 备份 / 导出 / 编辑 / 解析");
+        setTitle("Cognex Jobx 工具箱 - 备份 / 导出 / 编辑 / 解析 / 生成");
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         setSize(1280, 860);
         setMinimumSize(new Dimension(1024, 700));
@@ -38,6 +41,12 @@ public class MainFrame extends JFrame {
                 try {
                     if (editorTab != null) {
                         editorTab.shutdown();
+                    }
+                } catch (Exception ignored) {
+                }
+                try {
+                    if (generatorTab != null) {
+                        generatorTab.saveScriptOnExit();
                     }
                 } catch (Exception ignored) {
                 }
@@ -89,11 +98,28 @@ public class MainFrame extends JFrame {
             tabbedPane.addTab("Jobx 解析器", errorPanel);
         }
 
-        // 标签页带快捷键：Ctrl+1/2/3/4
+        // 生成器标签页：JS 脚本 → .jobx/.cxdx/.xlsx，无需连接相机 / Generator tab
+        try {
+            generatorTab = new GeneratorTabPanel(this);
+            tabbedPane.addTab("Jobx 生成器", generatorTab);
+        } catch (Throwable t) {
+            generatorTab = null;
+            JPanel errorPanel = new JPanel(new BorderLayout());
+            JTextArea msg = new JTextArea("Jobx 生成器初始化失败：\n"
+                    + (t.getMessage() != null ? t.getMessage() : t.toString()));
+            msg.setEditable(false);
+            msg.setFont(new Font("Microsoft YaHei", Font.PLAIN, 13));
+            msg.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+            errorPanel.add(msg, BorderLayout.CENTER);
+            tabbedPane.addTab("Jobx 生成器", errorPanel);
+        }
+
+        // 标签页带快捷键：Ctrl+1/2/3/4/5
         tabbedPane.setMnemonicAt(0, '1');
         tabbedPane.setMnemonicAt(1, '2');
         tabbedPane.setMnemonicAt(2, '3');
         tabbedPane.setMnemonicAt(3, '4');
+        tabbedPane.setMnemonicAt(4, '5');
 
         add(tabbedPane, BorderLayout.CENTER);
     }
