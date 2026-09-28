@@ -97,6 +97,47 @@ java -jar build/libs/cognex-jobx-backup-1.0.0-all_<时间戳>.jar
 ./build-with-timestamp.sh
 ```
 
+### 命令行调用（CLI）
+
+从 1.0.0 起，fat jar 同时支持 GUI 与 CLI 子命令模式。无参数启动即进入 GUI；首个参数为子命令时进入 CLI。
+
+```bash
+# 启动 GUI（默认）
+java -jar jobx文件备份助手_<时间戳>.jar
+
+# 离线解析 .jobx / .cxdx → xlsx（不连相机）
+java -jar jobx文件备份助手_<时间戳>.jar parse <file.jobx|file.cxdx> [--out <dir>]
+#   <file>      .jobx 或 .cxdx 文件路径
+#   --out <dir> 输出目录（可选，默认源文件同目录；不存在则自动创建）
+#   输出: {stem}_yyyyMMdd_HHmmss.xlsx，含「单元格」+「位置布局-{sheetName}」两个 sheet
+#       - 「单元格」sheet：位置 / 名称 / 值 / 表达式 / 批注，按位置排序
+#       - 「位置布局-{sheetName}」sheet：按 A0~Z599 坐标还原；cell[5] saved 图像字节流嵌入对应单元格；
+#         cell[6] cellStyle 的 background-color / color 应用为单元格背景与文本颜色；名称/表达式入批注
+
+# 帮助与版本
+java -jar jobx文件备份助手_<时间戳>.jar --help | -h
+java -jar jobx文件备份助手_<时间戳>.jar --version | -v
+```
+
+示例：
+
+```bash
+# 解析单个文件，输出到源文件同目录
+java -jar jobx文件备份助手_20260928105112.jar parse "天窗程序模板.jobx"
+
+# 解析单个文件，输出到指定目录
+java -jar jobx文件备份助手_20260928105112.jar parse "jobx/天窗程序模板.jobx" --out D:/exports
+
+# 批量解析当前目录下所有 .jobx / .cxdx（PowerShell）
+Get-ChildItem -Include *.jobx,*.cxdx -Recurse | ForEach-Object {
+    java -jar jobx文件备份助手_20260928105112.jar parse $_.FullName --out D:/exports
+}
+```
+
+退出码：`0` 成功；`1` 解析失败；`2` 参数错误。
+
+> 备份与导出功能因依赖相机连接（FTP/HMI 凭证与多相机配置），目前仅在 GUI 中提供；CLI 暂只覆盖离线解析。
+
 发布单文件 Windows exe（适合工控机分发）：
 
 ```bash
@@ -261,6 +302,48 @@ Or use the one-shot release script (builds and copies a timestamped jar to the p
 ```bash
 ./build-with-timestamp.sh
 ```
+
+### Command-Line Interface (CLI)
+
+Starting with 1.0.0 the fat jar supports both GUI and CLI subcommand modes. With no arguments it launches the GUI; a subcommand as the first argument switches to CLI mode.
+
+```bash
+# Launch GUI (default)
+java -jar jobx文件备份助手_<timestamp>.jar
+
+# Offline parse a .jobx / .cxdx file -> xlsx (no camera connection)
+java -jar jobx文件备份助手_<timestamp>.jar parse <file.jobx|file.cxdx> [--out <dir>]
+#   <file>      path to a .jobx or .cxdx file
+#   --out <dir> output directory (optional; defaults to the source file's directory; created if missing)
+#   Output: {stem}_yyyyMMdd_HHmmss.xlsx with two sheets — `单元格` ("Cells") and `位置布局-{sheetName}` ("Layout")
+#       - `单元格` sheet: location / name / value / expression / comment, sorted by location
+#       - `位置布局-{sheetName}` sheet: cells restored by A0~Z599 coordinates; cell[5] saved image byte
+#         stream embedded at the matching cell; cell[6] cellStyle background-color / color applied as
+#         cell background and text color; name / expression stored as cell comments
+
+# Help and version
+java -jar jobx文件备份助手_<timestamp>.jar --help | -h
+java -jar jobx文件备份助手_<timestamp>.jar --version | -v
+```
+
+Examples:
+
+```bash
+# Parse a single file, output next to the source
+java -jar jobx文件备份助手_20260928105112.jar parse "天窗程序模板.jobx"
+
+# Parse a single file into a specific directory
+java -jar jobx文件备份助手_20260928105112.jar parse "jobx/天窗程序模板.jobx" --out D:/exports
+
+# Batch-parse every .jobx / .cxdx under the current directory (PowerShell)
+Get-ChildItem -Include *.jobx,*.cxdx -Recurse | ForEach-Object {
+    java -jar jobx文件备份助手_20260928105112.jar parse $_.FullName --out D:/exports
+}
+```
+
+Exit codes: `0` success; `1` parse failure; `2` argument error.
+
+> Backup and Export depend on live camera connections (FTP / HMI credentials and multi-camera configs), so they are currently GUI-only; the CLI only covers offline parsing for now.
 
 Release a single-file Windows exe (for industrial-PC distribution):
 

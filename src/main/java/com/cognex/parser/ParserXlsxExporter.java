@@ -54,6 +54,14 @@ public class ParserXlsxExporter {
      * Export xlsx to the source file's parent directory.
      */
     public static File export(ParsedJob job, Date exportedAt) throws Exception {
+        return export(job, exportedAt, null);
+    }
+
+    /**
+     * 导出 xlsx；outDir 为 null 时输出到源文件同目录，否则输出到 outDir（不存在则创建）。
+     * Export xlsx; if outDir is null the file is written next to the source, otherwise into outDir (created if missing).
+     */
+    public static File export(ParsedJob job, Date exportedAt, File outDir) throws Exception {
         XSSFWorkbook wb = new XSSFWorkbook();
         try {
             Sheet sheet = wb.createSheet("单元格");
@@ -178,7 +186,12 @@ public class ParserXlsxExporter {
             // 输出文件 / output file
             String stem = stem(job.sourceFile.getName());
             String fileName = stem + "_" + new SimpleDateFormat("yyyyMMdd_HHmmss").format(exportedAt) + ".xlsx";
-            File outFile = new File(job.sourceFile.getAbsoluteFile().getParentFile(), fileName);
+            File parent = outDir != null ? outDir : job.sourceFile.getAbsoluteFile().getParentFile();
+            if (parent == null) parent = new File(".").getAbsoluteFile();
+            if (outDir != null && !parent.exists() && !parent.mkdirs()) {
+                throw new java.io.IOException("无法创建输出目录: " + parent);
+            }
+            File outFile = new File(parent, fileName);
             try (FileOutputStream fos = new FileOutputStream(outFile)) {
                 wb.write(fos);
             }
