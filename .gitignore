@@ -16,6 +16,16 @@ exports/
 # ---- 发布用 fat jar（大体积二进制，不属于源码） ----
 /jobx文件备份助手_*.jar
 
+# ---- 发布用单文件 exe（内嵌 JRE，约 130MB，不入库） ----
+/jobx文件备份助手_*.exe
+
+# ---- Launcher 内嵌 JRE MSI（约 41MB）与 dotnet 构建产物 ----
+#      payload/ 与 bin/obj 均由 bundle-exe-with-timestamp.sh 重新生成
+launcher/*.msi
+launcher/Launcher/bin/
+launcher/Launcher/obj/
+launcher/Launcher/payload/
+
 # ---- Kimi 会话导出（可能含敏感信息） ----
 kimi-export-*.md
 
