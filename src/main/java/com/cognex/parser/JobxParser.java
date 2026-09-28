@@ -23,7 +23,8 @@ import java.util.Map;
  * - .jobx = POSIX TAR 归档（V7 变体，无 ustar magic）
  *   * Job.json：明文 UTF-8，Sheets.<name> 可能 inline base64（Byte[]）或 FileRef 引用 sheets/<hash>
  *   * sheets/<hash>：4 字节循环 XOR 混淆（密钥 0x72 0x9B 0x0F 0x2E），内容为 sheet JSON
- *   * data/<hash>、*.sig、JobValidationSet/ 等：导出 xlsx 时忽略
+ *   * data/<hash>：cell[5] saved 字段引用，用于嵌入 xlsx；内部多为 Cognex 工具自定义容器，仅当字节流满足图像魔数时才会作为图片嵌入
+ *   * *.sig：HMAC 签名，跳过；JobValidationSet/ 等：忽略
  * - .cxdx = 同族 TAR 格式，snippet.json 用同 XOR 密钥
  *   结构 {"$type":"CopyBufferObject","range":"A1:Z318","cells":[...],...}
  *
@@ -114,7 +115,7 @@ public class JobxParser {
             sheetBytes = ref.toString().getBytes("UTF-8");
         }
         JsonObject sheetJson = parseJsonUtf8(sheetBytes).getAsJsonObject();
-        return parseSheet(name, sheetJson);
+        return parseSheet(name, sheetJson, entries);
     }
 
     // ======================== .cxdx 解析 ========================
@@ -131,7 +132,7 @@ public class JobxParser {
         JsonObject root = parseJsonUtf8(plain).getAsJsonObject();
 
         // snippet.json 顶层含 cells 数组 / snippet top-level has cells array
-        ParsedSheet sh = parseSheet("snippet", root);
+        ParsedSheet sh = parseSheet("snippet", root, entries);
         job.sheets.add(sh);
 
         if (root.has("range") && root.get("range").isJsonPrimitive()) {
@@ -142,18 +143,19 @@ public class JobxParser {
 
     // ======================== Sheet 解析 ========================
 
-    private static ParsedSheet parseSheet(String name, JsonObject sheetJson) {
+    private static ParsedSheet parseSheet(String name, JsonObject sheetJson,
+                                          Map<String, byte[]> entries) {
         ParsedSheet sheet = new ParsedSheet(name);
         if (!sheetJson.has("cells") || !sheetJson.get("cells").isJsonArray()) return sheet;
         JsonArray cells = sheetJson.getAsJsonArray("cells");
         for (JsonElement e : cells) {
-            ParsedCell cell = parseCell(e);
+            ParsedCell cell = parseCell(e, entries);
             if (cell != null) sheet.cells.add(cell);
         }
         return sheet;
     }
 
-    private static ParsedCell parseCell(JsonElement e) {
+    private static ParsedCell parseCell(JsonElement e, Map<String, byte[]> entries) {
         if (e.isJsonArray()) {
             // 数组形式（默认）/ Array form (default)
             JsonArray arr = e.getAsJsonArray();
@@ -163,7 +165,9 @@ public class JobxParser {
             // index 2 condition：跳过
             c.value = jsonAny(arr, 3);
             c.name = jsonStr(arr, 4);
-            // 5 saved：FileRef/Byte[]，导出 xlsx 无意义，跳过
+            // 5 saved：FileRef/Byte[]，提取字节用于嵌入 xlsx（仅当为图像字节流时有效）
+            // 5 saved: FileRef/Byte[]; extract bytes for xlsx embedding (only effective when bytes form a valid image)
+            c.savedBytes = extractSavedBytes(arr.get(5), entries);
             // 6 cellStyle, 7 graphicsStyle：跳过
             c.comment = jsonStr(arr, 8);
             // 9/10/11 input/output/ipProtected：跳过
@@ -178,7 +182,42 @@ public class JobxParser {
             c.value = jsonAny(o, "value");
             c.name = jsonStr(o, "name");
             c.comment = jsonStr(o, "comment");
+            if (o.has("saved")) {
+                c.savedBytes = extractSavedBytes(o.get("saved"), entries);
+            }
             return c;
+        }
+        return null;
+    }
+
+    /**
+     * 从 cell[5] saved 字段提取字节流。
+     * 形态 1：{"$type":"Byte[]","base64":"..."} → base64 解码即原字节（少数情况为图像字节流）
+     * 形态 2：{"$type":"FileRef","id":"data/<sha256>"} → 读 data/* 条目（注：Cognex 容器，非纯图像，可能嵌入失败）
+     * 失败或为空均返回 null。
+     *
+     * Extract bytes from cell[5] saved field.
+     * Form 1: {"$type":"Byte[]","base64":"..."} -> raw bytes after base64 decode (rarely a real image stream)
+     * Form 2: {"$type":"FileRef","id":"data/<sha256>"} -> read data/* entry (Cognex container, not raw image; may fail)
+     * Returns null on failure or null.
+     */
+    private static byte[] extractSavedBytes(JsonElement el, Map<String, byte[]> entries) {
+        if (el == null || el.isJsonNull() || !el.isJsonObject()) return null;
+        JsonObject o = el.getAsJsonObject();
+        String type = jsonType(o);
+        if ("Byte[]".equals(type)) {
+            String b64 = o.has("base64") ? o.get("base64").getAsString() : "";
+            if (b64.isEmpty()) return null;
+            try {
+                return java.util.Base64.getDecoder().decode(b64);
+            } catch (Exception ex) {
+                return null;
+            }
+        }
+        if ("FileRef".equals(type)) {
+            String id = o.has("id") ? o.get("id").getAsString() : null;
+            if (id == null || entries == null) return null;
+            return entries.get(id);
         }
         return null;
     }
@@ -187,13 +226,16 @@ public class JobxParser {
 
     /**
      * 读取 TAR 所有条目。
-     * 仅保留 Job.json / sheets/* / snippet.json，跳过 data/* 与 *.sig（避免大块占用内存）。
+     * 保留 Job.json / sheets/* / snippet.json / data/*（用于提取 cell[5] saved 字节），
+     * 仅跳过 *.sig（HMAC 签名）；单条 > MAX_BLOB 直接跳过以避免 OOM。
      *
-     * Read all TAR entries. Only Job.json / sheets/* / snippet.json are kept;
-     * data/* and *.sig are skipped to avoid holding large blobs in memory.
+     * Read all TAR entries. Job.json / sheets/* / snippet.json / data/* are kept
+     * (data/* is needed to extract cell[5] saved bytes); only *.sig (HMAC) is skipped.
+     * Blobs larger than MAX_BLOB are skipped to prevent OOM.
      */
     private static Map<String, byte[]> readTarEntries(File file) throws IOException {
         Map<String, byte[]> map = new HashMap<>();
+        final long MAX_BLOB = 16L * 1024 * 1024;  // 16 MB 单条上限 / per-entry cap
         try (FileInputStream fis = new FileInputStream(file)) {
             byte[] header = new byte[512];
             while (true) {
@@ -204,8 +246,8 @@ public class JobxParser {
                 if (name.isEmpty()) break;
                 long size = parseOctal(header, 124, 12);
 
-                // 跳过 data/* 与 *.sig（避免大对象占用内存） / Skip data/* and *.sig
-                if (name.startsWith("data/") || name.endsWith(".sig")) {
+                // 跳过 *.sig（HMAC 签名，不参与解析） / Skip *.sig (HMAC signature)
+                if (name.endsWith(".sig") || size > MAX_BLOB) {
                     long aligned = (size + 511) & ~511L;
                     skipFully(fis, aligned);
                     continue;
@@ -365,5 +407,7 @@ public class JobxParser {
         public String value = "";
         public String name = "";
         public String comment = "";
+        /** cell[5] saved 字段提取的原始字节（可能为图像字节流，也可能为 Cognex 容器）。 */
+        public byte[] savedBytes = null;
     }
 }
