@@ -41,6 +41,10 @@ dependencies {
     // === 导出工具标签页（移植自 Go 版导出工具）===
     // xlsx 生成（A4 打印友好的单元格/位置布局两个 sheet）
     implementation 'org.apache.poi:poi-ooxml:5.2.5'
+    // 按钮/标签图标（Swing 支持 + FontAwesome5 图标包）
+    implementation 'org.kordamp.ikonli:ikonli-core:12.3.1'
+    implementation 'org.kordamp.ikonli:ikonli-swing:12.3.1'
+    implementation 'org.kordamp.ikonli:ikonli-fontawesome5-pack:12.3.1'
 }
 
 application {
