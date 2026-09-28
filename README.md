@@ -12,11 +12,12 @@
 
 ## 中文
 
-一个基于 Java Swing 的 Cognex 视觉相机作业（`.jobx`）综合工具，主窗口为三个标签页：
+一个基于 Java Swing 的 Cognex 视觉相机作业（`.jobx`）综合工具，主窗口为四个标签页：
 
 1. **Jobx 备份工具**：通过 FTP/FTPS 从相机递归下载 `.jobx` 及 `.jobx.sig`，按 `备份目录/相机名称/yyyyMMddHHmmss/` 时间戳归档备份；
 2. **Jobx 导出工具**：FTP/FTPS 枚举相机上的全部作业，经 CogSocket HMI 逐个加载并读取电子表格单元格的**值与表达式**，为每个作业生成一个 A4 打印友好的 xlsx；
-3. **Jobx 编辑器**：CogSocket HMI 客户端，支持实时图像、电子表格单元格查看/编辑、手动触发、在线/离线与实时模式、相机信息查看、XML 导出，以及内置 QuickJS 的 JavaScript 脚本编辑器。
+3. **Jobx 编辑器**：CogSocket HMI 客户端，支持实时图像、电子表格单元格查看/编辑、手动触发、在线/离线与实时模式、相机信息查看、XML 导出，以及内置 QuickJS 的 JavaScript 脚本编辑器；
+4. **Jobx 解析器**：纯本地离线解析 `.jobx` / `.cxdx`（TAR + 4 字节循环 XOR 解混淆，不连相机），提取所有 sheet 的单元格 → 导出 `原文件名_yyyyMMdd_HHmmss.xlsx` 到源文件同目录。双 sheet 输出：`单元格`（位置/名称/值/表达式/批注，按位置排序）+ `位置布局-{sheetName}`（按 A0~Z599 坐标还原，cell[5] saved 字节流若为图像则嵌入对应单元格，cell[6] cellStyle 的 `background-color`/`color` 应用为单元格背景与文本颜色，名称/表达式入批注）。
 
 ### 功能特性
 
@@ -46,6 +47,15 @@
 - **JavaScript 脚本编辑器（QuickJS）**：F5 运行整段脚本，内置 `spreadsheet` API（触发、读写单元格、切换在线/实时模式等），另带交互式脚本输入框（Enter 执行、Shift+Enter 换行）。完整 API 与示例见 [PROGRAMING.md](PROGRAMING.md)（脚本功能需 JDK 19+）
 - **深色 / 浅色主题**切换，图像 / 电子表格 / 脚本编辑器三个面板可按需显示隐藏
 - 连接参数与界面偏好自动保存到 jar 所在目录的 `config.json`
+
+**④ Jobx 解析器**（离线，不连相机）
+
+- 拖入或打开 `.jobx` / `.cxdx` 文件 → 纯本地 TAR + 4 字节循环 XOR 解混淆（密钥 `0x72 0x9B 0x0F 0x2E`，Cognex 官方 `DeobfuscateBytes` 硬编码常量）→ 提取所有 sheet 的单元格
+- `.jobx` 走 `Job.json.Sheets.<name>`（inline `Byte[]` 或 `FileRef → sheets/<hash>`），`.cxdx` 走 `snippet.json`（同 XOR 密钥）
+- 输出 `{源文件stem}_yyyyMMdd_HHmmss.xlsx` 到源文件同目录，含两个 sheet：
+  - **`单元格`**：列 位置 / 名称 / 值 / 表达式 / 批注，按位置排序（A0,B0,...,A1,...）
+  - **`位置布局-{sheetName}`**：按 A0~Z599 坐标还原至 Excel 单元格；`cell[5] saved` 字节流若为图像（PNG/JPEG/BMP/WMF）则嵌入对应单元格；`cell[6] cellStyle` 中的 `background-color`/`color`（`rgba(R,G,B,A)` 格式，alpha 忽略）应用为单元格背景与文本颜色；名称/表达式入批注
+- 多 sheet 时每个源 sheet 单独一个 `位置布局-{sheetName}` sheet（避免同位置 comment 冲突）
 
 **通用**
 
@@ -167,11 +177,12 @@ src/main/java/com/cognex/
 
 ## English
 
-A Java Swing all-in-one tool for Cognex vision camera jobs (`.jobx`). The main window has three tabs:
+A Java Swing all-in-one tool for Cognex vision camera jobs (`.jobx`). The main window has four tabs:
 
 1. **Jobx Backup**: recursively downloads `.jobx` and `.jobx.sig` files from cameras via FTP/FTPS, archiving them under `backup-dir/CameraName/yyyyMMddHHmmss/` timestamp folders;
 2. **Jobx Export**: enumerates all jobs on the camera over FTP/FTPS, loads each one through the CogSocket HMI and reads every spreadsheet cell's **value and expression**, producing a print-friendly A4 xlsx workbook per job;
-3. **Jobx Editor**: a CogSocket HMI client with live image display, spreadsheet cell viewing/editing, manual trigger, online/offline and live-mode switching, camera info, XML export, and a built-in QuickJS JavaScript script editor.
+3. **Jobx Editor**: a CogSocket HMI client with live image display, spreadsheet cell viewing/editing, manual trigger, online/offline and live-mode switching, camera info, XML export, and a built-in QuickJS JavaScript script editor;
+4. **Jobx Parser**: offline local parser for `.jobx` / `.cxdx` files (TAR + 4-byte cyclic XOR deobfuscation, no camera connection); extracts all sheet cells and exports `{stem}_yyyyMMdd_HHmmss.xlsx` to the source file's directory. Two-sheet output: `单元格` (location/name/value/expression/comment, sorted by location) + `位置布局-{sheetName}` (restores A0~Z599 coordinates; cell[5] `saved` byte stream embedded as a picture if it is a valid image; cell[6] `cellStyle`'s `background-color`/`color` (in `rgba(R,G,B,A)` form, alpha dropped) applied as cell background and text color; name/expression put into cell comments).
 
 ### Features
 
@@ -201,6 +212,15 @@ A Java Swing all-in-one tool for Cognex vision camera jobs (`.jobx`). The main w
 - **JavaScript script editor (QuickJS)**: run the whole script with F5; built-in `spreadsheet` API (trigger, cell read/write, online/live-mode switching, etc.) plus an interactive script input (Enter to run, Shift+Enter for newline). See [PROGRAMING.md](PROGRAMING.md) for the full API reference and examples (scripting requires JDK 19+)
 - **Dark / light theme** toggle; the image / spreadsheet / script-editor panels can each be shown or hidden
 - Connection settings and UI preferences are auto-saved to `config.json` in the jar's directory
+
+**④ Jobx Parser** (offline, no camera connection)
+
+- Drop or open a `.jobx` / `.cxdx` file → pure local TAR + 4-byte cyclic XOR deobfuscation (key `0x72 0x9B 0x0F 0x2E`, the Cognex `DeobfuscateBytes` hardcoded constant) → extracts all sheet cells
+- `.jobx` reads `Job.json.Sheets.<name>` (inline `Byte[]` or `FileRef → sheets/<hash>`); `.cxdx` reads `snippet.json` (same XOR key)
+- Output `{source-stem}_yyyyMMdd_HHmmss.xlsx` next to the source file, with two sheets:
+  - **`单元格`** ("Cells"): columns location / name / value / expression / comment, sorted by location (A0,B0,...,A1,...)
+  - **`位置布局-{sheetName}`** ("Layout"): restores cells by A0~Z599 coordinates; `cell[5] saved` byte stream embedded as a picture at the cell anchor if it is a valid image (PNG/JPEG/BMP/WMF); `cell[6] cellStyle`'s `background-color` / `color` (in `rgba(R,G,B,A)` form, alpha dropped) applied as cell background and text color; name/expression stored as cell comments
+- With multiple source sheets, one `位置布局-{sheetName}` sheet is created per source sheet (avoids comment collisions on shared coordinates)
 
 **General**
 

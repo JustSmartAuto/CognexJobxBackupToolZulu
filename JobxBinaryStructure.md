@@ -523,7 +523,7 @@ sheet = json.loads(plain.decode('utf-8'))
 | 3 | value | str/int/float/dict/null | 运行时结果；dict 形如 `{"$type":"Image",...}`、`{"$type":"Byte[]","sz":16,"base64":"..."}` |
 | 4 | name | str | 单元格显示名（如 `"AcqCount"`） |
 | 5 | saved | 任意/null | **上次保存的单元格值**（v1.2 误判为"时间戳"） |
-| 6 | cellStyle | str | CSS 风格样式串（`IsvsCellStyleSerializer` 序列化；`""` = 无样式） |
+| 6 | cellStyle | str | CSS 风格样式串（`IsvsCellStyleSerializer` 序列化；`""` = 无样式）。实测格式：多个 CSS 块以空格分隔，每块形如 `.cell {color:rgba(0,0,128,1.0); background-color:rgba(255,255,255,0.0); }` 或 `.comment{ color:rgba(255,255,0,1.0) }`。颜色统一为 `rgba(R,G,B,A)`（A 为 0.0~1.0 浮点；POI 颜色无 alpha 通道，导出 xlsx 时忽略 A）。常见属性：`color`（文本颜色）、`background-color`（背景色）、`font`（如 `bold "Arial" 9pt`）、`text-align`、`vertical-align`。解析时取首个 `.cell { ... }` 块体即可；`.comment{ ... }` 块为批注样式，导出时可忽略 |
 | 7 | graphicsStyle | str | 图形样式名（`""` = 无） |
 | 8 | comment | str | 批注 |
 | 9 | input | 0/1 | 是否输入单元格 |
