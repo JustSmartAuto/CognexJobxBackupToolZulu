@@ -21,6 +21,7 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFClientAnchor;
 import org.apache.poi.xssf.usermodel.XSSFColor;
+import org.apache.poi.xssf.usermodel.XSSFFont;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 import java.awt.Color;
@@ -125,12 +126,18 @@ public class ParserXlsxExporter {
                 }
             });
 
+            // cellStyle 缓存：每个独立 CSS 串只创建一次 CellStyle（POI 单 workbook 样式上限 64000）
+            // cellStyle cache: one CellStyle per unique CSS string (POI limit 64000 styles per workbook)
+            java.util.Map<String, CellStyle> styleCache = new java.util.HashMap<>();
+
             int rowIdx = headRow;
             for (ParsedCell c : all) {
                 rowIdx++;
                 Row row = sheet.createRow(rowIdx);
-                setCell(row.createCell(0), c.location, wrapStyle);
-                setCell(row.createCell(1), c.name, wrapStyle);
+                // 按 cellStyle 解析背景/文本颜色 / Apply background/text color from cellStyle
+                CellStyle rowStyle = getOrCreateStyle(wb, c.cellStyle, wrapStyle, styleCache);
+                setCell(row.createCell(0), c.location, rowStyle);
+                setCell(row.createCell(1), c.name, rowStyle);
                 // 值列：若是图片字节流则显示描述，否则原值 / Value column: image description if bytes form a picture, else raw
                 String valueCol = c.value;
                 if (c.savedBytes != null && c.savedBytes.length > 0) {
@@ -140,9 +147,9 @@ public class ParserXlsxExporter {
                     }
                     // 非图像字节流不修改值列（避免 Cognex 计数器等小 blob 干扰） / Non-image blobs left untouched
                 }
-                setCell(row.createCell(2), valueCol, wrapStyle);
-                setCell(row.createCell(3), c.expression, wrapStyle);
-                setCell(row.createCell(4), c.comment, wrapStyle);
+                setCell(row.createCell(2), valueCol, rowStyle);
+                setCell(row.createCell(3), c.expression, rowStyle);
+                setCell(row.createCell(4), c.comment, rowStyle);
             }
 
             // 列宽 / column widths
@@ -165,7 +172,7 @@ public class ParserXlsxExporter {
             // 每个 ParsedSheet 一个"位置布局"sheet（避免多 sheet 同位置 comment 冲突）
             // One "位置布局" sheet per ParsedSheet (avoids comment collision when multiple sheets share same A0~Z599 coords)
             for (ParsedSheet sh : job.sheets) {
-                addLayoutSheet(wb, sh.name, sh.cells, wrapStyle);
+                addLayoutSheet(wb, sh.name, sh.cells, wrapStyle, styleCache);
             }
 
             // 输出文件 / output file
@@ -230,6 +237,92 @@ public class ParserXlsxExporter {
     }
 
     /**
+     * 从 cellStyle CSS 串解析出对应 CellStyle（背景色 + 文本颜色）；结果缓存以避免重复创建。
+     * CSS 形如 ".cell {color:rgba(0,0,128,1.0); background-color:rgba(255,255,255,0.0); }"
+     * 仅提取 .cell 块的 background-color 与 color，忽略 alpha 通道（POI 颜色无 alpha）。
+     * 空 cellStyle 或无可识别颜色 → 返回 baseStyle。
+     *
+     * Parse cellStyle CSS string into a CellStyle (background + text color); cached to avoid duplicates.
+     * CSS looks like ".cell {color:rgba(0,0,128,1.0); background-color:rgba(255,255,255,0.0); }"
+     * Only background-color and color inside the .cell block are extracted; alpha is dropped (POI colors have no alpha).
+     * Empty cellStyle or no recognizable colors -> returns baseStyle.
+     */
+    private static CellStyle getOrCreateStyle(XSSFWorkbook wb, String css, CellStyle baseStyle,
+                                                java.util.Map<String, CellStyle> cache) {
+        if (css == null || css.isEmpty()) return baseStyle;
+        CellStyle cached = cache.get(css);
+        if (cached != null) return cached;
+
+        // 提取 .cell { ... } 第一个块的内容 / Extract first .cell { ... } block body
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+            "\\.cell\\s*\\{([^}]*)\\}").matcher(css);
+        if (!m.find()) {
+            cache.put(css, baseStyle);
+            return baseStyle;
+        }
+        String body = m.group(1);
+
+        int[] bg = parseRgba(body, "background-color");
+        int[] fg = parseRgba(body, "color");
+        if (bg == null && fg == null) {
+            cache.put(css, baseStyle);
+            return baseStyle;
+        }
+
+        CellStyle style = wb.createCellStyle();
+        style.cloneStyleFrom(baseStyle);
+
+        if (bg != null) {
+            style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            style.setFillForegroundColor(new XSSFColor(new Color(bg[0], bg[1], bg[2]), null));
+        }
+
+        if (fg != null) {
+            // 创建带颜色的新 XSSFFont，保留 baseStyle Font 的 bold/字体/字号属性
+            // Create a new XSSFFont with text color, copying bold/font-name/size from baseStyle's font
+            XSSFFont baseFont = (XSSFFont) wb.getFontAt(baseStyle.getFontIndex());
+            XSSFFont font = (XSSFFont) wb.createFont();
+            if (baseFont != null) {
+                font.setBold(baseFont.getBold());
+                font.setItalic(baseFont.getItalic());
+                font.setFontName(baseFont.getFontName());
+                font.setFontHeightInPoints(baseFont.getFontHeightInPoints());
+            }
+            font.setColor(new XSSFColor(new Color(fg[0], fg[1], fg[2]), null));
+            style.setFont(font);
+        }
+
+        cache.put(css, style);
+        return style;
+    }
+
+    /**
+     * 从 CSS 块体中提取 propName: rgba(R, G, B, A) 的 R/G/B（A 忽略）。
+     * 前缀 (?:^|[;\s]) 保证 "color" 不会匹配 "background-color"（前面是 "-" 不在集合中）。
+     * 失败返回 null。
+     *
+     * Extract R/G/B from propName: rgba(R, G, B, A) inside a CSS block body (alpha dropped).
+     * The prefix (?:^|[;\s]) ensures "color" does not match inside "background-color" (preceded by "-" not in set).
+     * Returns null on failure.
+     */
+    private static int[] parseRgba(String cssBody, String propName) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+            "(?:^|[;\\s])" + java.util.regex.Pattern.quote(propName)
+            + "\\s*:\\s*rgba\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)"
+        ).matcher(cssBody);
+        if (!m.find()) return null;
+        try {
+            return new int[]{
+                Integer.parseInt(m.group(1)),
+                Integer.parseInt(m.group(2)),
+                Integer.parseInt(m.group(3))
+            };
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
      * 位置布局 sheet：按 A0~Z599 坐标还原至 Excel 单元格；图片嵌入对应单元格；表达式/名称入批注。
      * 每个源 sheet 单独创建一个 layout sheet（名为 "位置布局-{sheetName}"），避免多 sheet 同位置 comment 冲突。
      *
@@ -238,7 +331,8 @@ public class ParserXlsxExporter {
      * (named "位置布局-{sheetName}") to avoid comment collisions across sheets.
      */
     private static void addLayoutSheet(XSSFWorkbook wb, String sheetName,
-                                        List<ParsedCell> cells, CellStyle borderStyle) {
+                                        List<ParsedCell> cells, CellStyle borderStyle,
+                                        java.util.Map<String, CellStyle> styleCache) {
         Sheet sheet = wb.createSheet(layoutSheetName(wb, sheetName));
         Drawing<?> drawing = sheet.createDrawingPatriarch();
         CreationHelper helper = wb.getCreationHelper();
@@ -264,7 +358,9 @@ public class ParserXlsxExporter {
                     cell.setCellValue(val);
                 }
             }
-            cell.setCellStyle(borderStyle);
+            // 应用 cellStyle（背景/文本颜色） / Apply cellStyle (background/text color)
+            CellStyle cellSt = getOrCreateStyle(wb, c.cellStyle, borderStyle, styleCache);
+            cell.setCellStyle(cellSt);
 
             // 图片嵌入 / Embed picture if savedBytes form a valid image
             if (c.savedBytes != null && c.savedBytes.length > 0) {

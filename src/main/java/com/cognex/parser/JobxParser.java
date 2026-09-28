@@ -168,7 +168,10 @@ public class JobxParser {
             // 5 saved：FileRef/Byte[]，提取字节用于嵌入 xlsx（仅当为图像字节流时有效）
             // 5 saved: FileRef/Byte[]; extract bytes for xlsx embedding (only effective when bytes form a valid image)
             c.savedBytes = extractSavedBytes(arr.get(5), entries);
-            // 6 cellStyle, 7 graphicsStyle：跳过
+            // 6 cellStyle：CSS 风格样式串（IsvsCellStyleSerializer；含 background-color/color 等）
+            // 6 cellStyle: CSS-like style string (IsvsCellStyleSerializer; contains background-color/color etc.)
+            c.cellStyle = jsonStr(arr, 6);
+            // 7 graphicsStyle：跳过
             c.comment = jsonStr(arr, 8);
             // 9/10/11 input/output/ipProtected：跳过
             return c;
@@ -185,6 +188,7 @@ public class JobxParser {
             if (o.has("saved")) {
                 c.savedBytes = extractSavedBytes(o.get("saved"), entries);
             }
+            c.cellStyle = jsonStr(o, "cellStyle");
             return c;
         }
         return null;
@@ -409,5 +413,7 @@ public class JobxParser {
         public String comment = "";
         /** cell[5] saved 字段提取的原始字节（可能为图像字节流，也可能为 Cognex 容器）。 */
         public byte[] savedBytes = null;
+        /** cell[6] cellStyle：CSS 风格样式串（IsvsCellStyleSerializer），含 background-color/color 等。 */
+        public String cellStyle = "";
     }
 }
