@@ -55,7 +55,6 @@ The Annulus function Functions are tools that are available in Spreadsheet for p
 | Show | Specifies the display mode for the annulus graphic overlay on the image. |
 | 0 = hide all | The annulus structure graphic is not be displayed unless the cell containing the Annulus function is highlighted in the spreadsheet. |
 | 2 = input graphics only | The annulus structure graphic is always displayed. |
-|  |
 
 ### Outputs
 
@@ -707,7 +706,6 @@ For each scoring method, the selected scoring method type produces a raw score. 
 | Single Edge | Specifies that the function will search the Region for single edges that meet the specified criteria, and return their position. The Position and Contrast scoring methods can be used with this mode. |
 | Edge Pair | Specifies that the function will search the Region for edge pairs that meet the specified criteria. The Position, Contrast, Size, and Straddle scoring methods can be used with this mode. |
 | Number to Find | Specifies the maximum number of edges or edge pairs to return (1 to the image width, minus 1; default = 1). The maximum number of edges that may be detected is one less than the width of the image. |
-|  |
 
 ## CheckBox
 
@@ -1062,7 +1060,6 @@ Available for color In-Sight vision systems and color-enabled emulators only, Co
 | Hide all = 0 (default) | All graphics will be hidden, except when the cell containing the ExtractColorHistogram function is the active cell in the spreadsheet. |
 | Result graphics only = 1 | The input image resion and the histogram A histogram is a graphical representation of the distribution of pixel intensity values. A histogram refers to an array of pixels - how many and their individual greyscale values - within a region of interest (ROI). chart will be displayed at all times. |
 | Input graphics only = 2 | The input image region will be displayed at all times. |
-|  |
 
 ## ColorToGreyscaleFilter Outputs
 
@@ -1160,7 +1157,6 @@ Inputs
 | 1 = result graphics only | The processed image is displayed at all times. |
 | 2 = input graphics only | The graphics items associated with the input image region are displayed at all times. |
 | 3 = show all: input graphics and template image | The graphics items associated with the input image region are displayed at all times. However, while in the CompareImage property sheet, the template image is also displayed. |
-|  |
 
 ### Outputs
 
@@ -1846,7 +1842,6 @@ The EditAnnulus function has the following syntax: EditAnnulus(Image, X, Y, Thet
 | Show | Specifies the display mode for the EditAnnulus graphics overlay on the image. |
 | 0 = hide all | The annulus is hidden, except when the cell containing the EditAnnulus function is highlighted in the spreadsheet. |
 | 2 = input graphics only | The annulus is displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -2514,7 +2509,6 @@ A calibration image, a checkerboard grid with a fiducial and known scale, is use
 | 0 = hide all (default) | All graphics will be hidden, except when the cell containing the ExtractCalibrationPointsfunction is highlighted in the spreadsheet. |
 | 1 = result graphics only | Display extracted point locations overlayed on the input image |
 | 2 = input and results graphics | Display extracted point locations and the search region. |
-|  |
 
 ## ExtractCalibrationPoints Outputs
 
@@ -2568,7 +2562,6 @@ Note: The Fixture A fixture is a coordinate location on the image that keeps the
 | hide all (default) | All graphics are hidden, except when the cell containing the ExtractColor function is the active cell in the spreadsheet. |
 | result graphics only | The input image region is displayed at all times. |
 | input and result graphics | Both the input image region and the outlines of extracted colors are displayed at all times. |
-|  |
 
 ## Color Models Tab
 
@@ -2618,7 +2611,6 @@ The ExtractColorHistogram function Functions are tools that are available in Spr
 | Hide all = 0 (default) | All graphics will be hidden, except when the cell containing the ExtractColorHistogram function is the active cell in the spreadsheet. |
 | Input graphics only = 2 | The input image region will be displayed at all times. |
 | Show all = 3: input and chart | Both the input image region and the histogram chart will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -2684,7 +2676,6 @@ The Histogram function Functions are tools that are available in Spreadsheet for
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the ExtractHistogram function is the active cell in the spreadsheet. |
 | 2 = input graphics only | The input image region is displayed at all times. |
 | 3 = show all: input and chart | Both the input image region and the histogram chart are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -2764,7 +2755,6 @@ Note:
 | 15 = Invert | Specifies an inversion of pixel values based on the 256-step greyscale that results in an output image that is a "negative" of the input image (for example, inverting an input pixel value of 10 results in an output pixel value of 245). |
 | 17 = Local Median | Specifies an operation that computes the median pixel value of the pixel values in the kernel neighborhood, then uses this result as the output image pixel value. Note: This operation enables the Kernel Rows and Kernel Columns parameters. The kernel must be constructed from odd integer values. |
 | 18 = Local Median Normalization | Specifies a means to subtract the background from an image; this operation subtracts the local median of the input image from the input image, shifts the result right by one, and then adds 128 to produce the output pixel value. Note: This operation enables the Kernel Rows and Kernel Columns parameters. The kernel must be co |
-|  |
 
 ## FindBlobs
 
@@ -2972,7 +2962,6 @@ Converts each pixel within an annular (ring-like) region in an input image to bl
 | 0 = hide all (default) | The available graphics items are hidden, except when the cell containing the FindCircleDefects function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The processed image is displayed at all times. |
 | 2 = input graphics only | The graphics items associated with the input image region are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -3027,7 +3016,6 @@ Inspects the circularity of a continuous edge by finding the minimum and maximum
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the FindCircleMinMax function is the active cell in the spreadsheet. |
 | 1 = result graphics only | The circular edge and the minimum and maximum deviation points are displayed at all times. |
 | 2 = input and result graphics | The input image region, the circular edge, and the minimum and maximum deviation points are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -4725,7 +4713,6 @@ With the InspectEdge function in place, multiple inspections can be performed us
 | 1 = result graphics only | The Caliper graph and specified Caliper are displayed at all times. |
 | 2 = input and result graphics | The input image region, the Caliper graph, and specified Caliper are displayed at all times. |
 | 3 = show all: input, result, and calipers | The input image region, the Caliper graph, and all of the Calipers within the ROI are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -5027,7 +5014,6 @@ A bead path is a continuous pair of edges that define the boundary between two r
 | 5 = First Edge Pair Size | The first edge pair detected with the size closest to the Pair Size parameter receives the highest consideration. |
 | 6 = Strongest Edge Pair Size | The edge pair detected with the strongest transition and the size closest to the Pair Size parameter receives the highest consideration. |
 | 7 = First Strongest Edge Pair Size (default) | The first edge pair, with the strongest transition and the size closest to the Pair Size p |
-|  |
 
 ## InspectEdgeWidth
 
@@ -5265,7 +5251,6 @@ The LatchImage function Functions are tools that are available in Spreadsheet fo
 | 0 = hide all (default) | The available graphics items are hidden except when the cell containing the function is the active cell in the spreadsheet. Note: If the input region changes, a second region is displayed, indicating where the latching occurs on the next specified event. |
 | 1 = results graphics only | The processed image is always displayed. |
 | 2 = input graphics only | The graphics items associated with the input image region are always displayed. |
-|  |
 
 ### Outputs
 
@@ -5703,7 +5688,6 @@ The Mask function has the following syntax: Mask(Image, X, Y, Theta, X, Y, Width
 | 2 = Segmented Image | The color-coded and numerically indexed segment image will be displayed. |
 | 3 = Mask Image (default) | The binary mask image, after accounting for the fixture input, which is created after the segmentation and mask generation process. Pixel values of 255 = Care About Pixels; pixel values of 0 = Don't Care About Pixels. |
 | Show | Specifies which graphical overlays |
-|  |
 
 ## MatchColor
 
@@ -5740,7 +5724,6 @@ The MatchColor dialog consists of two main parts: the General tab and the Colors
 | Show | Specifies the display mode for MatchColor graphical overlays on top of the image. |
 | Hide all = 0 (default) | All graphics will be hidden, except when the cell containing the MatchColor function is the active cell in the spreadsheet. |
 | Input graphics only = 2 | The input image region will be displayed at all times. |
-|  |
 
 ### Colors Tab
 
@@ -6263,7 +6246,6 @@ Below is a description of the OCRMax settings found under the General tab of the
 | Show Diagnostics | Specifies which type of graphical diagnostic data to display on the image. |
 | 0 = hide all (default) | All graphical diagnostic data will be hidden, except when the cell containing the OCRMax function is highlighted in the spreadsheet. |
 | 1 = show rejected characters only | Regions around rejected character |
-|  |
 
 ## OCRMax Results
 
@@ -8317,7 +8299,6 @@ Ensure that the function's parameters are configured such that the function does
 | Sampling Factor | Specifies the amount by which to sample (1 to 99999; default = 1) the input image, thus reducing its resolution. Sampling is used to help reduce the function's execution time, however, at the expense of accuracy. Sub-sampling the image is helpful in instances where the contrast of the flaws is low and they gradually move; sub-sampling brings the pixels closer together so the transitions are shorter and steeper. When determining the proper sampling value, a value of 1 denotes no sampling, i.e. that the input image will be used at full resolution. Higher values denote less resolution and accuracy, but faster execution times. |
 | Automatic Smoothing | Specifies whether or not the function will determine the optimal smoothing factor by which to smooth the image. Allowing the function to select the optimal smoothing factor generally enables better performance. Note: The Automatic Smoothing parameter checkbox is disabled by default. To enable the parameter, the Sampling Factor parameter must be set to a value greater than 1. If the Sampling Factor parameter is set to a value greater than 1 and Automatic Smoothing is not desired, turn off the parameter and set the appropriate value using the Smoothing Factor parameter, instead. |
 | 0 = OFF | Specifies that a manual smoothing factor will be applied using the Smoothing Factor parameter |
-|  |
 
 ## TCPClient
 
@@ -8448,7 +8429,6 @@ Syntax: Timer(Time-String, Trigger)
 | Manual Acquire | 32 |
 | Acquires an image and updates the spreadsheet. The Trigger Type in the Acquisition Panel must be set to Single. | External 0 to External 7 |
 | 200–207 | Signals an external event. The default is External 0, event code 200. |
-|  |
 
 ## Timer Outputs
 
@@ -8570,7 +8550,6 @@ The TrainFlawModel function Functions are tools that are available in Spreadshee
 | 0 = hide all (default) | All graphics will be hidden, except when the cell containing the TrainFlawModel function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The specified Display Image will be shown at all times. |
 | 2 = input and result graphics | The input image region, the Model Image and Mask Image will be displayed at all times. |
-|  |
 
 ## TrainFlawModel Outputs
 
@@ -8678,7 +8657,6 @@ Extracts and trains a pattern from an image for use with the FindPatMaxRedLinefu
 | 1 = result graphics only | Trained features of the pattern are displayed at all times. |
 | 2 = input and result graphics | The input image region, pattern origin, and the trained features are displayed at all times. |
 | 3 = show all: input, result and training image | The input image region, pattern origin, the trained features, and the training image are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -11171,7 +11149,6 @@ The Box3D function has the following syntax: Box3D(PointCloud A point cloud is a
 | Show | Selects the type of graphics to overlay on the image. |
 | 0 = hide all (default) | All graphics will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 2 = input graphics only | The input data will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -11245,7 +11222,6 @@ The BoxFromRectangle3D function has the following syntax: BoxFromRectangle3D(Poi
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The result graphics of the function are displayed at all times. |
 | 2 = input and result graphics | The region of interest, the input data and the results are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -11321,7 +11297,6 @@ The Circle3D function has the following syntax: Circle3D(PointCloud A point clou
 | Show | Selects the type of graphics to overlay on the image. |
 | 0 = hide all (default) | All graphics will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 2 = input graphics only | The input data will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -11615,7 +11590,6 @@ The Cylinder3D function has the following syntax: Cylinder3D(PointCloud A point 
 | Show | Selects the type of graphics to overlay on the image. |
 | 0 = hide all (default) | All graphics will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 2 = input graphics only | The input data will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -11746,7 +11720,6 @@ The CylinderFromCircle3D function has the following syntax: CylinderFromCircle3D
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The result graphics of the function are displayed at all times. |
 | 2 = input and result graphics | The region of interest, the input data and the results are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -11948,7 +11921,6 @@ The EditBox3D function has the following syntax: EditBox3D(PointCloud A point cl
 | Show | Selects the type of graphics to overlay on the image. |
 | 0 = hide all (default) | All graphics will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 2 = input graphics only | The input data will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -12019,7 +11991,6 @@ The EditRegion3D function Functions are tools that are available in Spreadsheet 
 | Show | Selects the type of graphics to overlay on the image. |
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 2 = input graphics only | Only the input graphics are displayed. |
-|  |
 
 ### Output
 
@@ -12121,7 +12092,6 @@ The ExtractBlob3D function has the following syntax: ExtractBlob3D(PointCloud A 
 | Maximum Height | Specifies the maximum height (in real-world units) that the blobs can have to be detected and included. The value range is from the configured value of the Minimum Height property to inf. The default value is 10000). |
 | Blob Types | Specifies the blob types to detect or ignore by checking or unchecking their respective properties. The available types are the following: - Positive: Specifies a positive volume with respect to the reference shape (that is a blob above the reference shape). This is the default setting. - Negative: Specifies a negative volume with respect to the reference shape (that is a blob below the reference shape). - Unchanged: Specifies an unchanged volume with respect to the reference (that is, a blob that overlaps the reference shape, and as such, indicates no change). |
 | Sort Key | Specifies the logic by which the blobs of the referenced Blobs3D structure will be sorted. The available values are the following: - None: No sorting logic will be applied to the list of blobs. Use this setting if you simply want a count of the blobs, or want to examine them without the need to order them. - Volume: Sort the blobs by their volume. Use this setting if you want to examine the blobs sorted by their volume (e.g. from the largest volume to the smallest, or the opposite). This is the default setting. |
-|  |
 
 ## ExtractBlobFromCylinder3D
 
@@ -12179,7 +12149,6 @@ The ExtractBlobFromCylinder3D function has the following syntax: ExtractBlobFrom
 | Maximum Height | Specifies the maximum height (in real-world units) that the blobs can have to be detected and included. The value range is from the configured value of the Minimum Height property to inf. The default value is 10000). |
 | Blob Types | Specifies the blob types to detect or ignore by checking or unchecking their respective properties. The available types are the following: - Positive: Specifies a positive volume with respect to the reference shape (that is a blob above the reference shape). This is the default setting. - Negative: Specifies a negative volume with respect to the reference shape (that is a blob below the reference shape). - Unchanged: Specifies an unchanged volume with respect to the reference (that is, a blob that overlaps the reference shape, and as such, indicates no change). |
 | Sort Key | Specifies the logic by which the blobs of the referenced Blobs3D structure will be sorted. The available values are the following: - None: No sorting logic will be applied to the list of blobs. Use this setting if you simply want a count of the blobs, or want to examine them without the need to order them. - Volume: Sort the blobs by their volume. Use this setting if you want to examine the blobs sorted by their volume (e.g. from the largest volume to the smallest, or the opposite). This is the default setting. - Bounding Box Size: Sort the blobs by the length of their bounding boxes on the specified axis. Use this setting if you want to examine the blobs sorted by their size (e.g., from the largest to the smallest, or the opposite), wi |
-|  |
 
 ## ExtractBlobFromSphere3D
 
@@ -12234,7 +12203,6 @@ The ExtractBlobFromSphere3D function has the following syntax: ExtractBlobFromSp
 | Maximum Height | Specifies the maximum height (in real-world units) that the blobs can have to be detected and included. The value range is from the configured value of the Minimum Height property to inf. The default value is 10000). |
 | Blob Types | Specifies the blob types to detect or ignore by checking or unchecking their respective properties. The available types are the following: - Positive: Specifies a positive volume with respect to the reference shape (that is a blob above the reference shape). This is the default setting. - Negative: Specifies a negative volume with respect to the reference shape (that is a blob below the reference shape). - Unchanged: Specifies an unchanged volume with respect to the reference (that is, a blob that overlaps the reference shape, and as such, indicates no change). |
 | Sort Key | Specifies the logic by which the blobs of the referenced Blobs3D structure will be sorted. The available values are the following: - None: No sorting logic will be applied to the list of blobs. Use this setting if you simply want a count of the blobs, or want to examine them without the need to order them. - Volume: Sort the blobs by their volume. Use this setting if you want to examine the blobs sorted by their volume (e.g. from the largest volume to the smallest, or the opposite). This is the default setting. - Bounding Box Size: Sort the blobs by the length of their bounding boxes on the specified axis. Use this setting if you want to examine the blobs sorted by their size (e.g., from the largest to the smallest, or the opposite), with the size specified by the bounding box dimensions of the blobs. This sorting key has four sub-types: - Bounding Box Size X: Sort the blobs by the X-axis length of their bounding boxes. - Bounding Box Size Y: Sort the blobs by the Y-axis length of their bounding boxes. - Bounding Box Size Z: Sort the blobs by the Z-axis length of their bounding boxes. - Bounding Box Size D: Sort the blobs by the diagonal length of their bounding boxes. - Center of Mass: Sort the blobs by their 3D positions in the 3D point |
-|  |
 
 ## ExtractCircle3D
 
@@ -12455,7 +12423,6 @@ The ExtractClearSpotFromBlob3D function Functions are tools that are available i
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The result graphics of the function are displayed at all times. |
 | 2 = input and result graphics | The region of interest, the input data and the results are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -12696,7 +12663,6 @@ The ExtractDirectionHistogram3D function has the following syntax: ExtractDirect
 | 0 = hide all (default) | All graphics will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 2 = input graphics only | The region of interest and the reference plane will be displayed at all times. |
 | 3 = input and chart | The region of interest, the reference plane and the histogram chart will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -12801,7 +12767,6 @@ The ExtractDistanceHistogram3D function has the following syntax: ExtractDistanc
 | 0 = hide all (default) | All graphics will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 2 = input graphics only | The region of interest and the reference plane will be displayed at all times. |
 | 3 = input and chart | The region of interest, the reference plane and the histogram chart will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -13156,7 +13121,6 @@ The ExtractPoint3D function has the following syntax: ExtractPoint3D(PointCloud 
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The result graphics of the function are displayed at all times. |
 | 2 = input and result graphics | The region of interest, the input data and the results are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -13234,7 +13198,6 @@ The ExtractPolylineCrossSections3D function Functions are tools that are availab
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The result graphics of the function are displayed at all times. |
 | 2 = input and result graphics | The region of interest, the input data and the results are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -13560,7 +13523,6 @@ The Fixture3D function has the following syntax: Fixture3D(PointCloud A point cl
 | Show | Selects the type of graphics to overlay on the image. |
 | 0 = hide all (default) | All graphics will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 2 = input graphics only | The input data will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -13863,7 +13825,6 @@ The FixtureFromPointsAndPlane3D function has the following syntax: FixtureFromPo
 | Show | Selects the type of graphics to overlay on the image. |
 | 0 = hide all (default) | All graphics will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 2 = input graphics only | The input data will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -13964,7 +13925,6 @@ The Line3D function has the following syntax: Line3D(PointCloud A point cloud is
 | Show | Selects the type of graphics to overlay on the image. |
 | 0 = hide all (default) | All graphics will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 2 = input graphics only | The input data will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -14039,7 +13999,6 @@ The LineFromLinesOnPlane3D function has the following syntax: LineFromLinesOnPla
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The result graphics of the function are displayed at all times. |
 | 2 = input and result graphics | The region of interest, the input data and the results are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -14516,7 +14475,6 @@ The MultiBoxRegion3D function has the following syntax: MultiBoxRegion3D(PointCl
 | Show | Selects the type of graphics to overlay on the image. |
 | 0 = hide all (default) | All graphics will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 2 = input graphics only | The input data will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -14549,7 +14507,6 @@ The ParallelPlane3D function has the following syntax: ParallelPlane3D(PointClou
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The result graphics of the function are displayed at all times. |
 | 2 = input and result graphics | The region of interest, the input data and the results are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -14683,7 +14640,6 @@ The Plane3D function has the following syntax: Plane3D(PointCloud A point cloud 
 | Show | Selects the type of graphics to overlay on the image. |
 | 0 = hide all (default) | All graphics will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 2 = input graphics only | The input data will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -14806,7 +14762,6 @@ The PlaneFromPoints3D function has the following syntax: PlaneFromPoints3D(Point
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The result graphics of the function are displayed at all times. |
 | 2 = input and result graphics | The region of interest, the input data and the results are displayed at all times. |
-|  |
 
 ### (Outputs
 
@@ -14980,7 +14935,6 @@ The PlotArc3D function has the following syntax: PlotBox3D(PointCloud A point cl
 | Show | Selects the display mode. |
 | 0 (Unchecked) = Off | The structure will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 (Checked) = On (default) | The structure will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -15023,7 +14977,6 @@ The PlotBox3D function has the following syntax: PlotBox3D(PointCloud A point cl
 | Show | Selects the display mode. |
 | 0 (Unchecked) = Off | The structure will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 (Checked) = On (default) | The structure will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -15060,7 +15013,6 @@ The PlotCircle3D function has the following syntax: PlotCircle3D(PointCloud A po
 | Show | Selects the display mode. |
 | 0 (Unchecked) = Off | The structure will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 (Checked) = On (default) | The structure will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -15098,7 +15050,6 @@ The PlotCylinder3D function has the following syntax: PlotCylinder3D(PointCloud 
 | Show | Selects the display mode. |
 | 0 (Unchecked) = Off | The structure will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 (Checked) = On (default) | The structure will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -15163,7 +15114,6 @@ The PlotFixture3D function has the following syntax: PlotFixture3D(PointCloud A 
 | Show | Selects the display mode. |
 | 0 (Unchecked) = Off | The structure will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 (Checked) = On (default) | The structure will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -15200,7 +15150,6 @@ The PlotLine3D function has the following syntax: PlotLine3D(PointCloud A point 
 | Show | Selects the display mode. |
 | 0 (Unchecked) = Off | The structure will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 (Checked) = On (default) | The structure will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -15237,7 +15186,6 @@ The PlotPlane3D function has the following syntax: PlotPlane3D(PointCloud A poin
 | Show | Selects the display mode. |
 | 0 (Unchecked) = Off | The structure will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 (Checked) = On (default) | The structure will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -15270,7 +15218,6 @@ The PlotPoint3D function has the following syntax: PlotPlane3D(PointCloud A poin
 | Show | Selects the display mode. |
 | 0 (Unchecked) = Off | The structure will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 (Checked) = On (default) | The structure will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -15336,7 +15283,6 @@ The PlotRectangle3D function has the following syntax: PlotRectangle3D(PointClou
 | Show | Selects the display mode. |
 | 0 (Unchecked) = Off | The structure will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 (Checked) = On (default) | The structure will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -15377,7 +15323,6 @@ The PlotRegion3D function has the following syntax: PlotRegion3D(PointCloud A po
 | Show | Selects the display mode. |
 | 0 (Unchecked) = Off | The structure will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 (Checked) = On (default) | The structure will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -15412,7 +15357,6 @@ The PlotSphere3D function has the following syntax: PlotSphere3D(PointCloud A po
 | Show | Selects the display mode. |
 | 0 (Unchecked) = Off | The structure will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 (Checked) = On (default) | The structure will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -15445,7 +15389,6 @@ The PlotString3D function has the following syntax: PlotString3D(PointCloud A po
 | Show | Selects the display mode. |
 | 0 (Unchecked) = Off | The structure will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 (Checked) = On (default) | The structure will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -15705,7 +15648,6 @@ The PointFromPixelAndPlane3D function has the following syntax: PointFromLineAnd
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The result graphics of the function are displayed at all times. |
 | 2 = input and result graphics | The region of interest, the input data and the results are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -15772,7 +15714,6 @@ The PointFromPlanes3D function has the following syntax: PointFromLineAndPlane3D
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The result graphics of the function are displayed at all times. |
 | 2 = input and result graphics | The region of interest, the input data and the results are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -16366,7 +16307,6 @@ The ProfileExtractCircle3D function has the following syntax: ProfileExtractCirc
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The result graphics of the function are displayed at all times. |
 | 2 = input and result graphics | The region of interest, the input data and the results are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -16441,7 +16381,6 @@ The ProfileExtractCornerPoint3D function has the following syntax: ProfileExtrac
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The result graphics of the function are displayed at all times. |
 | 2 = input and result graphics | The region of interest, the input data and the results are displayed at all times. |
-|  |
 
 ### (Outputs
 
@@ -16627,7 +16566,6 @@ The ProfileExtractLine3D function has the following syntax: ProfileExtractLine3D
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The result graphics of the function are displayed at all times. |
 | 2 = input and result graphics | The region of interest, the input data and the results are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -16708,7 +16646,6 @@ The ProfileExtractPoint3D function has the following syntax: ProfileExtractPoint
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The result graphics of the function are displayed at all times. |
 | 2 = input and result graphics | The region of interest, the input data and the results are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -16856,7 +16793,6 @@ The ProfileFixtureFromPoint3D function has the following syntax: ProfileFixtureF
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The result graphics of the function are displayed at all times. |
 | 2 = input and result graphics | The region of interest, the input data and the results are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -17032,7 +16968,6 @@ The ProfileFlatness3D function has the following syntax: ProfileFlatness3D(Profi
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The result graphics of the function are displayed at all times. |
 | 2 = input and result graphics | The region of interest, the input data and the results are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -17219,7 +17154,6 @@ The Rectangle3D function has the following syntax: Rectangle3D(PointCloud A poin
 | Show | Selects the type of graphics to overlay on the image. |
 | 0 = hide all (default) | All graphics will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 2 = input graphics only | The input data will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -17368,7 +17302,6 @@ The Region3D function Functions are tools that are available in Spreadsheet for 
 | Show | Selects the type of graphics to overlay on the image. |
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 2 = input graphics only | Only the input graphics are displayed. |
-|  |
 
 ### Outputs
 
@@ -17499,7 +17432,6 @@ The SetHeightColorRange function Functions are tools that are available in Sprea
 | Show | Selects the type of graphics to overlay on the image. |
 | 0 = hide all (default) | All graphics will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 2 = input graphics only | The input data will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -17560,7 +17492,6 @@ The SortBlob3D function has the following syntax: SortBlob3D(PointCloud A point 
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The result graphics of the function are displayed at all times. |
 | 2 = input and result graphics | The region of interest, the input data and the results are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -17639,7 +17570,6 @@ The SortEdge3D function has the following syntax: SortEdge3D(PointCloud A point 
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The result graphics of the function are displayed at all times. |
 | 2 = input and result graphics | The region of interest, the input data and the results are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -17773,7 +17703,6 @@ The SortPatMax3D function has the following syntax: SortPlane3D(PointCloud A poi
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The result graphics of the function are displayed at all times. |
 | 2 = input and result graphics | The region of interest, the input data and the results are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -17853,7 +17782,6 @@ The SortPlane3D function has the following syntax: SortPlane3D(PointCloud A poin
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The result graphics of the function are displayed at all times. |
 | 2 = input and result graphics | The region of interest, the input data and the results are displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -17934,7 +17862,6 @@ The Sphere3D function has the following syntax: Sphere3D(PointCloud A point clou
 | Show | Selects the type of graphics to overlay on the image. |
 | 0 = hide all (default) | All graphics will be hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 2 = input graphics only | The input data will be displayed at all times. |
-|  |
 
 ### Outputs
 
@@ -18025,7 +17952,6 @@ The TrainPatMax3D function has the following syntax: TrainPatMax3D(PointCloud A 
 | 0 = hide all (default) | All graphics are hidden, except when the cell containing the function is highlighted in the spreadsheet. |
 | 1 = result graphics only | The result graphics of the function are displayed at all times. |
 | 2 = input and result graphics | The region of interest, the input data and the results are displayed at all times. |
-|  |
 
 ### Outputs
 
